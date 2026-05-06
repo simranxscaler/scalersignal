@@ -9,25 +9,31 @@ import re
 import httpx
 from bs4 import BeautifulSoup
 
-_LI_USER = os.environ.get("LINKEDIN_USERNAME", "")
-_LI_PASS = os.environ.get("LINKEDIN_PASSWORD", "")
-
 # Cached Linkedin client (one auth session per process)
 _client = None
+_client_user = None  # track which user the cached client belongs to
 
 
 def _get_client():
-    global _client
-    if _client is not None:
-        return _client
-    if not _LI_USER or not _LI_PASS:
+    global _client, _client_user
+    # Read env vars lazily so Railway vars set after deploy are picked up
+    li_user = os.environ.get("LINKEDIN_USERNAME", "")
+    li_pass = os.environ.get("LINKEDIN_PASSWORD", "")
+    if not li_user or not li_pass:
+        print("[linkedin_svc] LINKEDIN_USERNAME / LINKEDIN_PASSWORD not set")
         return None
+    # Re-auth if credentials changed
+    if _client is not None and _client_user == li_user:
+        return _client
     try:
         from linkedin_api import Linkedin
-        _client = Linkedin(_LI_USER, _LI_PASS, refresh_cookies=False)
+        print(f"[linkedin_svc] authenticating as {li_user}")
+        _client = Linkedin(li_user, li_pass, refresh_cookies=True)
+        _client_user = li_user
         return _client
     except Exception as e:
         print(f"[linkedin_svc] auth failed: {e}")
+        _client = None
         return None
 
 
@@ -227,16 +233,26 @@ def scrape_profile(linkedin_url: str) -> dict:
     """
     public_id = _extract_public_id(linkedin_url)
     if not public_id:
+        print(f"[linkedin_svc] could not extract public_id from: {linkedin_url}")
         return {}
 
-    if _LI_USER and _LI_PASS:
+    li_user = os.environ.get("LINKEDIN_USERNAME", "")
+    li_pass = os.environ.get("LINKEDIN_PASSWORD", "")
+
+    if li_user and li_pass:
         try:
             result = _scrape_authenticated(public_id)
             if result:
                 print(f"[linkedin_svc] authenticated scrape OK for {public_id}")
                 return result
+            print(f"[linkedin_svc] authenticated scrape returned empty for {public_id}")
         except Exception as e:
             print(f"[linkedin_svc] authenticated scrape failed, trying html fallback: {e}")
+    else:
+        print("[linkedin_svc] no credentials — skipping authenticated scrape")
 
     # HTML fallback
-    return _scrape_html(linkedin_url)
+    result = _scrape_html(linkedin_url)
+    if not result:
+        print(f"[linkedin_svc] html scrape also returned empty for {linkedin_url}")
+    return result
