@@ -409,7 +409,7 @@ Return: {{"is_scaler_call": true/false, "reason": "one sentence explanation", "l
     try:
         import base64
         pdf_b64 = base64.b64encode(pdf_bytes).decode()
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
             gas_resp = await client.post(GAS_URL, json={
                 "action": "upload_pdf",
                 "filename": f"Scaler_{lead['name'].replace(' ', '_')}.pdf",
