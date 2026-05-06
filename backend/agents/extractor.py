@@ -3,18 +3,28 @@ from openai import OpenAI
 
 client = OpenAI()
 
-SYSTEM = """You are an expert sales call analyst. Extract structured intelligence from a sales call transcript.
+SYSTEM = """You are extracting structured data from a sales call transcript.
+
+ABSOLUTE RULES:
+1. Only extract what is explicitly said in the transcript. Never infer or assume.
+2. open_questions: copy verbatim or near-verbatim from what the lead actually said. If none, return [].
+3. objections: only real objections the lead explicitly raised. If none, return [].
+4. intent_signals: only direct quotes or paraphrases of things the lead said showing interest. If none, return [].
+5. emotional_state: describe only what is observable from the words used — not assumed feelings.
+6. key_context: only facts explicitly stated. No assumptions about their situation.
+7. If the transcript is too short or vague to extract something, leave that field empty — do not fill it in.
+
 Return ONLY valid JSON — no markdown, no explanation."""
 
-PROMPT = """Analyse this sales call transcript and extract:
+PROMPT = """Extract structured intelligence from this sales call transcript. Only use what is explicitly stated.
 
 {{
-  "open_questions": ["exact questions the lead asked, verbatim or near-verbatim"],
-  "objections": [{{"objection": "...", "intensity": "high|medium|low"}}],
-  "intent_signals": ["specific phrases that signal intent or readiness"],
-  "emotional_state": "one sentence — lead's emotional state during the call",
-  "persona_type": "one of: career_switcher | senior_explorer | fresher_anxious | re_activation",
-  "key_context": "2-3 sentences — the most important things to know about this lead"
+  "open_questions": ["verbatim or near-verbatim questions the lead asked — empty list if none"],
+  "objections": [{{"objection": "exact objection raised", "intensity": "high|medium|low"}}],
+  "intent_signals": ["direct quotes showing interest or readiness — empty if none"],
+  "emotional_state": "observable tone from words used — not assumed feelings. Empty string if unclear.",
+  "persona_type": "one of: career_switcher | senior_explorer | fresher_anxious | re_activation — only if clearly evident from transcript",
+  "key_context": "facts explicitly stated in the transcript only — no assumptions. Empty string if insufficient data."
 }}
 
 Transcript:
@@ -27,7 +37,7 @@ def extract(transcript: str) -> dict:
             {"role": "system", "content": SYSTEM},
             {"role": "user", "content": PROMPT.format(transcript=transcript)}
         ],
-        temperature=0.2,
+        temperature=0,
         response_format={"type": "json_object"}
     )
     content = resp.choices[0].message.content
