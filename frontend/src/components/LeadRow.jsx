@@ -570,12 +570,49 @@ function CallDoneModal({ lead, onClose, onRefresh }) {
 
 // ── Table Row ────────────────────────────────────────────────────────────────
 
+const PROGRAMS = ['Academy', 'DSML', 'DevOps & AI', 'Online MBA']
+
+function ProgramBadge({ program }) {
+  if (!program) return <span className="text-xs text-scaler-slate/50 italic">—</span>
+  const colors = {
+    'Academy':     'text-blue-700 bg-blue-50 border-blue-200',
+    'DSML':        'text-purple-700 bg-purple-50 border-purple-200',
+    'DevOps & AI': 'text-teal-700 bg-teal-50 border-teal-200',
+    'Online MBA':  'text-orange-700 bg-orange-50 border-orange-200',
+  }
+  return (
+    <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${colors[program] || 'text-scaler-slate bg-scaler-cultured border-scaler-border'}`}>
+      {program}
+    </span>
+  )
+}
+
 export default function LeadRow({ lead, pdfStatus, onRefresh, isLast }) {
   const meta = STATUS_META[pdfStatus] || STATUS_META['nudge_sent']
+  const { user } = useAuth()
   const [showDrawer, setShowDrawer] = useState(false)
   const [showCallModal, setShowCallModal] = useState(false)
+  const [program, setProgram] = useState(lead.program || '')
+  const [savingProgram, setSavingProgram] = useState(false)
   const borderClass = isLast ? '' : 'border-b border-scaler-border'
   const canCompleteCall = pdfStatus === 'pending_call' || pdfStatus === 'nudge_sent'
+
+  async function handleProgramChange(e) {
+    const val = e.target.value
+    setProgram(val)
+    setSavingProgram(true)
+    try {
+      const token = await user.getIdToken()
+      await fetch(`${API}/api/leads/${lead.id}/program`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ program: val || null }),
+      })
+      onRefresh()
+    } finally {
+      setSavingProgram(false)
+    }
+  }
 
   return (
     <>
@@ -597,6 +634,19 @@ export default function LeadRow({ lead, pdfStatus, onRefresh, isLast }) {
           <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${meta.color}`}>
             {meta.label}
           </span>
+        </td>
+
+        {/* Program selector — stop propagation */}
+        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+          <select
+            value={program}
+            onChange={handleProgramChange}
+            disabled={savingProgram}
+            className="text-xs border border-scaler-border rounded-md px-2 py-1 bg-white text-scaler-oxford focus:outline-none focus:ring-1 focus:ring-scaler-blue disabled:opacity-50 cursor-pointer"
+          >
+            <option value="">— Program —</option>
+            {PROGRAMS.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
         </td>
 
         {/* Schedule — click to open drawer which has the picker */}

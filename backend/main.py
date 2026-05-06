@@ -194,6 +194,29 @@ async def schedule_call(lead_id: str, req: ScheduleCallRequest, request: Request
     return {"status": "ok", "call_scheduled_at": req.call_scheduled_at}
 
 
+# ── Update program for a lead ────────────────────────────────────────────────
+
+VALID_PROGRAMS = {'Academy', 'DSML', 'DevOps & AI', 'Online MBA'}
+
+class UpdateProgramRequest(BaseModel):
+    program: Optional[str] = None
+
+@app.patch("/api/leads/{lead_id}/program")
+async def update_program(lead_id: str, req: UpdateProgramRequest, request: Request):
+    bda_email = await get_bda_email(request)
+    from services.supabase_svc import SUPABASE_URL, _headers
+
+    if req.program is not None and req.program not in VALID_PROGRAMS:
+        raise HTTPException(status_code=400, detail=f"Invalid program. Must be one of: {', '.join(VALID_PROGRAMS)}")
+
+    r = httpx.get(f"{SUPABASE_URL}/rest/v1/leads?id=eq.{lead_id}&bda_email=eq.{bda_email}", headers=_headers())
+    if not (r.status_code == 200 and r.json()):
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    update_lead(lead_id, {"program": req.program})
+    return {"status": "ok", "program": req.program}
+
+
 # ── Step 1: Create lead + send BDA pre-call nudge ────────────────────────────
 
 @app.post("/api/leads")
