@@ -42,7 +42,14 @@ app = FastAPI(title="Scaler AI Agent × Sales")
 def _fire_scheduled_nudges():
     from services.supabase_svc import SUPABASE_URL, _headers
     now_utc = datetime.datetime.utcnow()
-    window_start = (now_utc + datetime.timedelta(minutes=58)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # Fire for any lead where:
+    #   - nudge not yet sent
+    #   - call is still pending
+    #   - call_scheduled_at is between (now - 1h) and now  → already in the firing window
+    #     OR call_scheduled_at is up to 62 min in the future → classic 1-hour-before window
+    # Combined: call_scheduled_at is between (now - 1h) and (now + 62 min)
+    window_start = (now_utc - datetime.timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
     window_end   = (now_utc + datetime.timedelta(minutes=62)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     r = httpx.get(
@@ -80,6 +87,13 @@ def _fire_scheduled_nudges():
         except Exception:
             pass
     return fired
+
+
+@app.post("/api/cron/nudges")
+def cron_nudges():
+    """Called every minute by Railway cron or external scheduler."""
+    fired = _fire_scheduled_nudges()
+    return {"fired": fired}
 
 
 async def get_bda_email(request: Request) -> str:
