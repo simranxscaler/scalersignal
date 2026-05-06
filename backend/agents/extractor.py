@@ -8,14 +8,14 @@ Return ONLY valid JSON — no markdown, no explanation."""
 
 PROMPT = """Analyse this sales call transcript and extract:
 
-{
+{{
   "open_questions": ["exact questions the lead asked, verbatim or near-verbatim"],
-  "objections": [{"objection": "...", "intensity": "high|medium|low"}],
+  "objections": [{{"objection": "...", "intensity": "high|medium|low"}}],
   "intent_signals": ["specific phrases that signal intent or readiness"],
   "emotional_state": "one sentence — lead's emotional state during the call",
   "persona_type": "one of: career_switcher | senior_explorer | fresher_anxious | re_activation",
   "key_context": "2-3 sentences — the most important things to know about this lead"
-}
+}}
 
 Transcript:
 {transcript}"""

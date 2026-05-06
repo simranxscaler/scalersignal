@@ -211,24 +211,30 @@ async def create_lead(
     No transcript needed at this point — the call hasn't happened yet.
     """
     bda_email = await get_bda_email(request)
+    print(f"[create-lead] bda={bda_email} name={lead_name} phone={lead_phone} program={program}")
 
     # Look up BDA phone from DB
     bda_phone = get_bda_phone(bda_email)
     if not bda_phone:
+        print(f"[create-lead] ERROR: no BDA phone configured for {bda_email}")
         raise HTTPException(status_code=400, detail="BDA phone not configured — complete setup first")
+    print(f"[create-lead] bda_phone={bda_phone}")
 
     # Scrape LinkedIn if URL provided (non-blocking on failure)
     linkedin_data = {}
     linkedin_for_llm = linkedin
     if linkedin and "linkedin.com/in/" in linkedin:
+        print(f"[create-lead] scraping linkedin: {linkedin}")
         try:
             linkedin_data = await asyncio.to_thread(scrape_profile, linkedin)
             if linkedin_data.get("raw_summary"):
                 linkedin_for_llm = linkedin_data["raw_summary"]
-        except Exception:
-            pass
+            print(f"[create-lead] linkedin scraped ok, headline={linkedin_data.get('headline')}")
+        except Exception as e:
+            print(f"[create-lead] linkedin scrape failed (non-fatal): {e}")
 
     # Save lead (call_status defaults to 'pending_call')
+    print(f"[create-lead] saving lead to DB")
     try:
         lead = insert_lead({
             "name": lead_name,
@@ -246,29 +252,37 @@ async def create_lead(
             "bda_email": bda_email,
         })
         lead_id = lead["id"]
+        print(f"[create-lead] lead saved, id={lead_id}")
     except Exception as e:
+        print(f"[create-lead] ERROR saving lead: {e}")
         raise HTTPException(status_code=500, detail=f"Lead save failed: {str(e)}")
 
     # Generate pre-call nudge (no transcript — use profile + LinkedIn only)
+    print(f"[create-lead] generating nudge for lead_id={lead_id}")
     try:
         nudge_text = await asyncio.to_thread(
             generate_nudge, lead_name, background, intent, program, linkedin_for_llm,
             {}  # no extracted call intelligence yet
         )
+        print(f"[create-lead] nudge generated, length={len(nudge_text)}")
     except Exception as e:
+        print(f"[create-lead] ERROR generating nudge: {e}")
         raise HTTPException(status_code=500, detail=f"Nudge generation failed: {str(e)}")
 
     # Save nudge record
     try:
         insert_nudge({"lead_id": lead_id, "content": nudge_text})
-    except Exception:
-        pass
+        print(f"[create-lead] nudge saved to DB")
+    except Exception as e:
+        print(f"[create-lead] nudge DB save failed (non-fatal): {e}")
 
     # Send nudge to BDA immediately
+    print(f"[create-lead] sending nudge to BDA whatsapp {bda_phone}")
     try:
         send_text(bda_phone, f"📋 *Pre-call brief for {lead_name}*\n\n{nudge_text}")
-    except Exception:
-        pass
+        print(f"[create-lead] nudge sent ok")
+    except Exception as e:
+        print(f"[create-lead] whatsapp send failed (non-fatal): {e}")
 
     return {
         "lead_id": lead_id,
@@ -290,23 +304,29 @@ async def complete_call(
     Accepts transcript text or audio. Generates the personalised PDF and queues it for BDA approval.
     """
     bda_email = await get_bda_email(request)
+    print(f"[complete-call] lead_id={lead_id} bda={bda_email}")
 
     # Fetch lead from DB
     from services.supabase_svc import SUPABASE_URL, _headers
     r = httpx.get(f"{SUPABASE_URL}/rest/v1/leads?id=eq.{lead_id}&bda_email=eq.{bda_email}", headers=_headers())
     rows = r.json()
     if not rows:
+        print(f"[complete-call] ERROR: lead {lead_id} not found for bda {bda_email}")
         raise HTTPException(status_code=404, detail="Lead not found")
     lead = rows[0]
+    print(f"[complete-call] lead found: name={lead['name']}")
 
     # Transcribe audio if provided
     if audio_file and audio_file.filename:
+        print(f"[complete-call] transcribing audio: {audio_file.filename}")
         audio_bytes = await audio_file.read()
         suffix = "." + audio_file.filename.rsplit(".", 1)[-1] if "." in audio_file.filename else ".mp3"
         try:
             from services.whisper_svc import transcribe
             transcript = transcribe(audio_bytes, suffix)
+            print(f"[complete-call] transcription done, length={len(transcript)}")
         except Exception as e:
+            print(f"[complete-call] ERROR transcribing: {e}")
             raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
 
     if not transcript:
@@ -363,22 +383,29 @@ Return: {{"is_scaler_call": true/false, "reason": "one sentence explanation", "l
     linkedin_for_llm = lead.get("linkedin_summary") or lead.get("linkedin_url") or ""
 
     # Generate PDF content
+    print(f"[complete-call] generating PDF content for {lead['name']}")
     try:
         pdf_content = await asyncio.to_thread(
             generate_pdf_content,
             lead["name"], lead.get("background", ""), lead.get("intent", ""),
             lead.get("program", ""), linkedin_for_llm, extracted
         )
+        print(f"[complete-call] PDF content generated, sections={len(pdf_content.get('sections', []))}")
     except Exception as e:
+        print(f"[complete-call] ERROR generating PDF content: {e}")
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
 
     # Build PDF bytes
+    print(f"[complete-call] building PDF bytes")
     try:
         pdf_bytes = build_pdf(pdf_content, lead["name"], lead.get("program", ""))
+        print(f"[complete-call] PDF built, size={len(pdf_bytes)} bytes")
     except Exception as e:
+        print(f"[complete-call] ERROR building PDF: {e}")
         raise HTTPException(status_code=500, detail=f"PDF build failed: {str(e)}")
 
     # Upload to Google Drive via GAS
+    print(f"[complete-call] uploading PDF to Google Drive via GAS")
     try:
         import base64
         pdf_b64 = base64.b64encode(pdf_bytes).decode()
@@ -393,11 +420,14 @@ Return: {{"is_scaler_call": true/false, "reason": "one sentence explanation", "l
             })
             gas_resp.raise_for_status()
             pdf_url = gas_resp.json()["fileUrl"]
+            print(f"[complete-call] PDF uploaded to Drive: {pdf_url}")
     except Exception as e:
+        print(f"[complete-call] ERROR uploading to Drive: {e}")
         raise HTTPException(status_code=500, detail=f"Drive upload failed: {str(e)}")
 
     # Save PDF record (pending_approval)
     cover_message = pdf_content.get("cover_message", f"Hi {lead['name']}, here's a personalised overview based on our conversation today.")
+    print(f"[complete-call] saving PDF record to DB")
     try:
         pdf_record = insert_pdf({
             "lead_id": lead_id,
@@ -406,16 +436,20 @@ Return: {{"is_scaler_call": true/false, "reason": "one sentence explanation", "l
             "cover_message": cover_message
         })
         pdf_id = pdf_record["id"]
-    except Exception:
+        print(f"[complete-call] PDF record saved, pdf_id={pdf_id}")
+    except Exception as e:
+        print(f"[complete-call] PDF DB save failed (non-fatal): {e}")
         pdf_id = "no-db"
 
     # Chunk + embed transcript in background
+    print(f"[complete-call] chunking + embedding transcript")
     try:
         chunks = chunk_text(transcript)
         embeddings = embed_chunks(chunks)
         insert_transcript_chunks(lead_id, chunks, embeddings)
-    except Exception:
-        pass
+        print(f"[complete-call] embedded {len(chunks)} chunks")
+    except Exception as e:
+        print(f"[complete-call] embedding failed (non-fatal): {e}")
 
     return {
         "pdf": {

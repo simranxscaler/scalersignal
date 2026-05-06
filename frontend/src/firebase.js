@@ -15,4 +15,10 @@ const firebaseConfig = {
 export const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const googleProvider = new GoogleAuthProvider()
-export const analytics = getAnalytics(app)
+let analytics = null
+try {
+  analytics = getAnalytics(app)
+} catch {
+  analytics = null
+}
+export { analytics }
