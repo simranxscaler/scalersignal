@@ -478,7 +478,8 @@ Return: {{"is_scaler_call": true/false, "reason": "one sentence explanation", "l
         pdf_id = pdf_record["id"]
         print(f"[complete-call] PDF record saved, pdf_id={pdf_id}")
     except Exception as e:
-        print(f"[complete-call] PDF DB save failed (non-fatal): {e}")
+        import traceback
+        print(f"[complete-call] PDF DB save failed: {traceback.format_exc()}")
         pdf_id = "no-db"
 
     # Chunk + embed transcript in background
@@ -508,18 +509,33 @@ class ApprovalRequest(BaseModel):
     pdf_id: str
     action: str  # approve | skip
     edited_message: Optional[str] = None
+    # fallback fields used when pdf_id == "no-db" (DB insert failed at complete-call time)
+    lead_id: Optional[str] = None
+    pdf_url: Optional[str] = None
+    pdf_download_url: Optional[str] = None
 
 @app.post("/api/approve")
 async def approve(req: ApprovalRequest):
     if req.action not in ("approve", "skip"):
         raise HTTPException(status_code=400, detail="action must be approve or skip")
 
-    pdf_record = get_pdf(req.pdf_id)
-    if not pdf_record:
-        raise HTTPException(status_code=404, detail="PDF record not found")
+    no_db = req.pdf_id == "no-db"
+
+    if no_db:
+        pdf_record = {
+            "lead_id": req.lead_id,
+            "pdf_url": req.pdf_url,
+            "pdf_download_url": req.pdf_download_url,
+            "cover_message": req.edited_message,
+        }
+    else:
+        pdf_record = get_pdf(req.pdf_id)
+        if not pdf_record:
+            raise HTTPException(status_code=404, detail="PDF record not found")
 
     if req.action == "skip":
-        update_pdf_status(req.pdf_id, "skipped")
+        if not no_db:
+            update_pdf_status(req.pdf_id, "skipped")
         return {"status": "skipped"}
 
     message = req.edited_message or pdf_record.get("cover_message", "")
@@ -539,7 +555,8 @@ async def approve(req: ApprovalRequest):
         else:
             raise HTTPException(status_code=400, detail="Lead phone not found — cannot send")
 
-        update_pdf_status(req.pdf_id, "sent")
+        if not no_db:
+            update_pdf_status(req.pdf_id, "sent")
         return {"status": "sent", "pdf_url": pdf_record["pdf_url"]}
 
     except HTTPException:

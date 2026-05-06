@@ -437,7 +437,14 @@ function CallDoneModal({ lead, onClose, onRefresh }) {
       await fetch(`${API}/api/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ pdf_id: pdfResult.pdf_id, action, edited_message: editedMessage })
+        body: JSON.stringify({
+          pdf_id: pdfResult.pdf_id,
+          action,
+          edited_message: editedMessage,
+          lead_id: lead.id,
+          pdf_url: pdfResult.pdf_url,
+          pdf_download_url: pdfResult.pdf_download_url,
+        })
       })
       onRefresh()
     } finally {
