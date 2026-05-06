@@ -30,8 +30,11 @@ def extract(transcript: str) -> dict:
         temperature=0.2,
         response_format={"type": "json_object"}
     )
-    raw = resp.choices[0].message.content.strip()
-    print(f"[extractor] raw response: {raw[:300]}")
+    content = resp.choices[0].message.content
+    print(f"[extractor] raw content: {repr(content[:300]) if content else 'NONE'}")
+    if not content:
+        return {"open_questions": [], "objections": [], "intent_signals": [], "emotional_state": "", "persona_type": "career_switcher", "key_context": ""}
+    raw = content.strip()
     # Strip markdown fences
     if raw.startswith("```"):
         raw = raw.split("```")[1]
@@ -46,4 +49,3 @@ def extract(transcript: str) -> dict:
     except json.JSONDecodeError as e:
         print(f"[extractor] JSON parse error: {e}, raw: {raw[:500]}")
         raise
-# Wed May  6 22:06:03 IST 2026
