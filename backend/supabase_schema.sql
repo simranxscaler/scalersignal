@@ -136,9 +136,12 @@ create table if not exists pdfs (
   id uuid primary key default gen_random_uuid(),
   lead_id uuid references leads(id) on delete set null,
   pdf_url text not null,
+  pdf_download_url text,
   cover_message text,
   status text not null default 'pending_approval'
     check (status in ('pending_approval', 'approved', 'sent', 'skipped')),
   created_at timestamptz default now(),
   sent_at timestamptz
 );
+
+alter table pdfs add column if not exists pdf_download_url text;

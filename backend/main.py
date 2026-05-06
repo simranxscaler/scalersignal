@@ -419,7 +419,9 @@ Return: {{"is_scaler_call": true/false, "reason": "one sentence explanation", "l
                 "program": lead.get("program") or "Scaler"
             })
             gas_resp.raise_for_status()
-            pdf_url = gas_resp.json()["fileUrl"]
+            gas_data = gas_resp.json()
+            pdf_url = gas_data["fileUrl"]
+            pdf_download_url = gas_data.get("downloadUrl", pdf_url)
             print(f"[complete-call] PDF uploaded to Drive: {pdf_url}")
     except Exception as e:
         print(f"[complete-call] ERROR uploading to Drive: {e}")
@@ -432,6 +434,7 @@ Return: {{"is_scaler_call": true/false, "reason": "one sentence explanation", "l
         pdf_record = insert_pdf({
             "lead_id": lead_id,
             "pdf_url": pdf_url,
+            "pdf_download_url": pdf_download_url,
             "status": "pending_approval",
             "cover_message": cover_message
         })
@@ -493,7 +496,9 @@ async def approve(req: ApprovalRequest):
                 lead = rows[0]
 
         if lead and lead.get("phone"):
-            send_pdf(lead["phone"], message, pdf_record["pdf_url"])
+            twilio_url = pdf_record.get("pdf_download_url") or pdf_record["pdf_url"]
+            print(f"[approve] sending PDF to {lead['phone']} via {twilio_url}")
+            send_pdf(lead["phone"], message, twilio_url)
         else:
             raise HTTPException(status_code=400, detail="Lead phone not found — cannot send")
 
@@ -504,6 +509,80 @@ async def approve(req: ApprovalRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"WhatsApp send failed: {str(e)}")
+
+
+# ── Resend WhatsApp ──────────────────────────────────────────────────────────
+
+class ResendRequest(BaseModel):
+    edited_message: Optional[str] = None
+
+@app.post("/api/leads/{lead_id}/resend-pdf")
+async def resend_pdf_by_lead(lead_id: str, request: Request):
+    """Resend the latest PDF for a lead — convenience endpoint called from the dashboard."""
+    bda_email = await get_bda_email(request)
+    from services.supabase_svc import SUPABASE_URL, _headers
+
+    # Verify lead ownership
+    lr = httpx.get(f"{SUPABASE_URL}/rest/v1/leads?id=eq.{lead_id}&bda_email=eq.{bda_email}", headers=_headers())
+    leads = lr.json()
+    if not leads:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    lead = leads[0]
+
+    # Get latest PDF for this lead
+    pr = httpx.get(f"{SUPABASE_URL}/rest/v1/pdfs?lead_id=eq.{lead_id}&order=created_at.desc&limit=1", headers=_headers())
+    pdfs = pr.json()
+    if not pdfs:
+        raise HTTPException(status_code=404, detail="No PDF found for this lead")
+    pdf_record = pdfs[0]
+
+    print(f"[resend-by-lead] lead={lead['name']} pdf_id={pdf_record['id']}")
+    try:
+        twilio_url = pdf_record.get("pdf_download_url") or pdf_record["pdf_url"]
+        message = pdf_record.get("cover_message", f"Hi {lead['name']}, here's your personalised Scaler overview.")
+        send_pdf(lead["phone"], message, twilio_url)
+        update_pdf_status(pdf_record["id"], "sent")
+        print(f"[resend-by-lead] sent ok")
+        return {"status": "sent"}
+    except Exception as e:
+        print(f"[resend-by-lead] ERROR: {e}")
+        raise HTTPException(status_code=500, detail=f"Resend failed: {str(e)}")
+
+@app.post("/api/pdfs/{pdf_id}/resend")
+async def resend_pdf(pdf_id: str, req: ResendRequest, request: Request):
+    """Resend the PDF to the lead's WhatsApp — useful if the first send failed."""
+    bda_email = await get_bda_email(request)
+
+    pdf_record = get_pdf(pdf_id)
+    if not pdf_record:
+        raise HTTPException(status_code=404, detail="PDF record not found")
+
+    print(f"[resend] pdf_id={pdf_id} bda={bda_email}")
+
+    message = req.edited_message or pdf_record.get("cover_message", "")
+    try:
+        from services.supabase_svc import SUPABASE_URL, _headers
+        r = httpx.get(f"{SUPABASE_URL}/rest/v1/leads?id=eq.{pdf_record['lead_id']}", headers=_headers())
+        rows = r.json()
+        if not rows:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        lead = rows[0]
+
+        if not lead.get("phone"):
+            raise HTTPException(status_code=400, detail="Lead has no phone number")
+
+        twilio_url = pdf_record.get("pdf_download_url") or pdf_record["pdf_url"]
+        print(f"[resend] sending to {lead['phone']} via {twilio_url}")
+        send_pdf(lead["phone"], message, twilio_url)
+        update_pdf_status(pdf_id, "sent")
+        print(f"[resend] sent ok")
+        return {"status": "sent", "pdf_url": pdf_record["pdf_url"]}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[resend] ERROR: {e}")
+        raise HTTPException(status_code=500, detail=f"Resend failed: {str(e)}")
 
 
 # ── Status ───────────────────────────────────────────────────────────────────

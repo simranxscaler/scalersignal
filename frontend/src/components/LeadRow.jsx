@@ -82,6 +82,25 @@ function LeadDrawer({ lead, pdfStatus, onClose, onMarkCallDone, onScheduleSave }
   }
 
   const canCompleteCall = pdfStatus === 'pending_call' || pdfStatus === 'nudge_sent'
+  const [resending, setResending] = useState(false)
+  const [resendStatus, setResendStatus] = useState(null) // 'ok' | 'error'
+
+  async function resendPdf() {
+    setResending(true)
+    setResendStatus(null)
+    try {
+      const token = await user.getIdToken()
+      const res = await fetch(`${API}/api/leads/${lead.id}/resend-pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      })
+      setResendStatus(res.ok ? 'ok' : 'error')
+    } catch {
+      setResendStatus('error')
+    } finally {
+      setResending(false)
+    }
+  }
 
   const skills = Array.isArray(lead.linkedin_skills) ? lead.linkedin_skills : []
   const experiences = Array.isArray(lead.linkedin_experiences) ? lead.linkedin_experiences : []
@@ -298,6 +317,17 @@ function LeadDrawer({ lead, pdfStatus, onClose, onMarkCallDone, onScheduleSave }
             >
               Review PDF →
             </a>
+          </div>
+        )}
+        {pdfStatus === 'sent' && (
+          <div className="px-6 py-4 border-t border-scaler-border shrink-0">
+            <button
+              onClick={resendPdf}
+              disabled={resending}
+              className="w-full text-sm font-semibold py-3 rounded-xl border border-scaler-border text-scaler-oxford hover:bg-scaler-cultured transition-colors disabled:opacity-50"
+            >
+              {resending ? 'Resending…' : resendStatus === 'ok' ? '✓ Sent again' : resendStatus === 'error' ? 'Failed — retry?' : 'Resend PDF on WhatsApp'}
+            </button>
           </div>
         )}
       </div>
@@ -607,6 +637,21 @@ export default function LeadRow({ lead, pdfStatus, onRefresh, isLast }) {
             >
               Review PDF →
             </a>
+          )}
+          {pdfStatus === 'sent' && (
+            <button
+              onClick={async (e) => {
+                e.stopPropagation()
+                const token = await user.getIdToken()
+                await fetch(`${API}/api/leads/${lead.id}/resend-pdf`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                })
+              }}
+              className="text-xs border border-scaler-border text-scaler-oxford font-medium px-3 py-1.5 rounded-lg hover:bg-scaler-cultured transition-colors whitespace-nowrap"
+            >
+              Resend PDF
+            </button>
           )}
         </td>
       </tr>

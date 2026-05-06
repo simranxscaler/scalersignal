@@ -60,10 +60,11 @@ function handlePDFUpload(payload) {
   // Make it viewable by anyone with the link
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
-  // Return a clean viewer URL (opens in browser, not force-download)
+  // Return both a viewer URL and a direct download URL for Twilio
   var fileUrl = 'https://drive.google.com/file/d/' + file.getId() + '/view?usp=sharing';
+  var downloadUrl = 'https://drive.google.com/uc?export=download&id=' + file.getId();
 
-  return jsonResponse({ fileUrl: fileUrl, fileId: file.getId() });
+  return jsonResponse({ fileUrl: fileUrl, downloadUrl: downloadUrl, fileId: file.getId() });
 }
 
 function jsonResponse(data) {
