@@ -31,12 +31,13 @@ export default function PDFPreview({ pdfData, onApprove, loading }) {
         <h3 className="text-sm font-semibold text-scaler-oxford">Lead PDF — Awaiting BDA Approval</h3>
       </div>
 
-      {/* PDF Preview */}
+      {/* PDF Preview — convert Drive view URL to embed URL */}
       <div className="rounded-xl overflow-hidden border border-scaler-border bg-scaler-cultured">
         <iframe
-          src={pdfData.pdf_url}
+          src={pdfData.pdf_url.replace('/view', '/preview').replace('?usp=sharing', '')}
           className="w-full h-64"
           title="Lead PDF Preview"
+          allow="autoplay"
         />
       </div>
       <a href={pdfData.pdf_url} target="_blank" rel="noreferrer"

@@ -531,6 +531,8 @@ async def approve(req: ApprovalRequest):
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        print(f"[approve] WhatsApp send failed: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"WhatsApp send failed: {str(e)}")
 
 
