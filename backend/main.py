@@ -541,19 +541,23 @@ async def approve(req: ApprovalRequest):
     message = req.edited_message or pdf_record.get("cover_message", "")
     try:
         lead = None
-        if pdf_record.get("lead_id"):
+        lead_id_to_fetch = pdf_record.get("lead_id") or req.lead_id
+        print(f"[approve] pdf_id={req.pdf_id} no_db={no_db} lead_id={lead_id_to_fetch}")
+        if lead_id_to_fetch:
             from services.supabase_svc import SUPABASE_URL, _headers
-            r = httpx.get(f"{SUPABASE_URL}/rest/v1/leads?id=eq.{pdf_record['lead_id']}", headers=_headers())
-            rows = r.json()
+            r = httpx.get(f"{SUPABASE_URL}/rest/v1/leads?id=eq.{lead_id_to_fetch}", headers=_headers())
+            print(f"[approve] lead fetch status={r.status_code} body={r.text[:200]}")
+            rows = r.json() if r.status_code == 200 else []
             if rows:
                 lead = rows[0]
 
+        print(f"[approve] lead={lead and lead.get('name')} phone={lead and lead.get('phone')}")
         if lead and lead.get("phone"):
-            twilio_url = pdf_record.get("pdf_download_url") or pdf_record["pdf_url"]
+            twilio_url = pdf_record.get("pdf_download_url") or pdf_record.get("pdf_url") or req.pdf_download_url or req.pdf_url
             print(f"[approve] sending PDF to {lead['phone']} via {twilio_url}")
             send_pdf(lead["phone"], message, twilio_url)
         else:
-            raise HTTPException(status_code=400, detail="Lead phone not found — cannot send")
+            raise HTTPException(status_code=400, detail=f"Lead phone not found — lead={lead and lead.get('name')} lead_id={lead_id_to_fetch}")
 
         if not no_db:
             update_pdf_status(req.pdf_id, "sent")
