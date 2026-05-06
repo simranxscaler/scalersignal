@@ -31,14 +31,18 @@ def extract(transcript: str) -> dict:
         response_format={"type": "json_object"}
     )
     raw = resp.choices[0].message.content.strip()
-    print(f"[extractor] raw response: {raw[:200]}")
-    # Strip markdown fences if model ignores instructions
+    print(f"[extractor] raw response: {raw[:300]}")
+    # Strip markdown fences
     if raw.startswith("```"):
         raw = raw.split("```")[1]
         if raw.startswith("json"):
             raw = raw[4:]
+    raw = raw.strip()
+    # Wrap in braces if model returned bare key-value pairs without outer {}
+    if raw and not raw.startswith("{"):
+        raw = "{" + raw + "}"
     try:
-        return json.loads(raw.strip())
+        return json.loads(raw)
     except json.JSONDecodeError as e:
         print(f"[extractor] JSON parse error: {e}, raw: {raw[:500]}")
         raise
