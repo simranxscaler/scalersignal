@@ -628,16 +628,29 @@ function ResendModal({ lead, onClose, onRefresh }) {
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState('')
+  const [phone, setPhone] = useState(lead.phone || '')
+  const [editingPhone, setEditingPhone] = useState(false)
+  const [savingPhone, setSavingPhone] = useState(false)
+
+  async function savePhone() {
+    setSavingPhone(true)
+    try {
+      const token = await user.getIdToken()
+      await fetch(`${API}/api/leads/${lead.id}/phone`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ phone }),
+      })
+      setEditingPhone(false)
+    } finally {
+      setSavingPhone(false)
+    }
+  }
 
   useEffect(() => {
     async function fetchPdf() {
       try {
         const token = await user.getIdToken()
-        const r = await fetch(`${API}/api/bda/leads`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-        const data = await r.json()
-        // Get the PDF record for this lead via a separate fetch
         const pr = await fetch(`${API}/api/leads/${lead.id}/pdf`, {
           headers: { Authorization: `Bearer ${token}` }
         })
@@ -645,6 +658,8 @@ function ResendModal({ lead, onClose, onRefresh }) {
           const pdf = await pr.json()
           setPdfRecord(pdf)
           setEditedMessage(pdf.cover_message || '')
+        } else {
+          setError('No PDF found for this lead.')
         }
       } catch (e) {
         setError('Could not load PDF record.')
@@ -684,7 +699,31 @@ function ResendModal({ lead, onClose, onRefresh }) {
         <div className="px-6 py-5 border-b border-scaler-border flex items-center justify-between">
           <div>
             <h2 className="text-scaler-oxford font-semibold">Resend PDF — {lead.name}</h2>
-            <p className="text-scaler-slate text-xs mt-0.5">Edit the WhatsApp message and resend the PDF</p>
+            <div className="flex items-center gap-2 mt-1">
+              {editingPhone ? (
+                <>
+                  <input
+                    value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    className="text-xs border border-scaler-border rounded-md px-2 py-0.5 w-36 focus:outline-none focus:border-scaler-blue"
+                    placeholder="10-digit number"
+                    maxLength={15}
+                  />
+                  <button onClick={savePhone} disabled={savingPhone}
+                    className="text-xs text-white bg-scaler-blue px-2 py-0.5 rounded-md disabled:opacity-50">
+                    {savingPhone ? '...' : 'Save'}
+                  </button>
+                  <button onClick={() => { setEditingPhone(false); setPhone(lead.phone || '') }}
+                    className="text-xs text-scaler-slate hover:text-scaler-oxford">Cancel</button>
+                </>
+              ) : (
+                <>
+                  <span className="text-xs text-scaler-slate">{phone}</span>
+                  <button onClick={() => setEditingPhone(true)}
+                    className="text-xs text-scaler-blue hover:underline">Edit</button>
+                </>
+              )}
+            </div>
           </div>
           <button onClick={onClose} className="text-scaler-slate hover:text-scaler-oxford text-xl leading-none">×</button>
         </div>
