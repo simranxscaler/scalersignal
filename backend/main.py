@@ -34,7 +34,23 @@ if _fb_cert and not firebase_admin._apps:
     cred = credentials.Certificate(json.loads(_fb_cert))
     firebase_admin.initialize_app(cred)
 
-app = FastAPI(title="Scaler AI Agent × Sales")
+async def _nudge_loop():
+    """Background task: fires scheduled nudges every 60 seconds."""
+    while True:
+        try:
+            fired = _fire_scheduled_nudges()
+            if fired:
+                print(f"[nudge-loop] fired {fired} nudge(s)")
+        except Exception as e:
+            print(f"[nudge-loop] error: {e}")
+        await asyncio.sleep(60)
+
+async def lifespan(app):
+    task = asyncio.create_task(_nudge_loop())
+    yield
+    task.cancel()
+
+app = FastAPI(title="Scaler AI Agent × Sales", lifespan=lifespan)
 
 
 # ── Nudge firing logic (called by Supabase pg_cron via HTTP) ─────────────────
