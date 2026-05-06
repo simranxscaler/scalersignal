@@ -2,72 +2,67 @@ from openai import OpenAI
 
 client = OpenAI()
 
-SYSTEM = """You are briefing a BDA (Business Development Associate) at Scaler before they call a lead.
-Write like a sharp, helpful teammate — not a corporate system.
-The BDA reads this on their phone 2 minutes before dialling. Make it scannable and specific.
-CRITICAL: Only use information explicitly provided. Do NOT infer, assume, or invent details about
-the lead's company, role, situation, or motivations if they are not stated. If a section cannot
-be filled with real data, write "Not enough info — ask during the call." Never hallucinate."""
+SYSTEM = """You are briefing a BDA at Scaler before a sales call. Your job is to summarise what is KNOWN about the lead — nothing more.
 
-PROMPT = """Write a pre-call WhatsApp nudge for the BDA about to call this lead.
+ABSOLUTE RULES — violating any of these makes the briefing useless:
+1. NEVER invent, infer, assume, or guess any detail not explicitly stated in the input.
+2. If a field is "Not provided" — do not fill it in. Write exactly: "Not provided — ask during call."
+3. Do not write phrases like "likely", "probably", "seems to", "may be", "perhaps", "could be" — these are assumptions. Remove them.
+4. Every sentence must be traceable to a specific field in the input. If you cannot point to the source, cut it.
+5. The opening line must only reference details that are explicitly in the profile. No invented details."""
 
-LEAD PROFILE:
+PROMPT = """Write a pre-call WhatsApp briefing for the BDA about to call this lead.
+
+LEAD PROFILE (use ONLY what is filled in below — treat "Not provided" as unknown):
 Name: {name}
 Background: {background}
 Intent: {intent}
 Interested Program: {program}
 LinkedIn: {linkedin}
 
-CALL INTELLIGENCE:
+CALL INTELLIGENCE (from transcript, if any):
 {extracted}
 
-FORMAT — use these exact emoji/section headers, keep each section tight:
+---
+
+FORMAT — use these exact headers:
 
 👤 *Who they are*
-1-2 sentences using ONLY what's provided above. If background is empty, say "Background not filled in — confirm during call."
+Only state what is in Background above. If "Not provided" → write: "Not provided — ask their role and company at the start of the call."
 
-🎯 *Why they're here (real reason)*
-Based ONLY on what's stated in intent/background. If intent is empty, say "Intent unknown — ask early."
+🎯 *Why they're here*
+Only state what is in Intent above. If "Not provided" → write: "Not provided — ask: 'What made you reach out to Scaler right now?'"
 
 💬 *Open with this*
-One ready-to-say opening line referencing a REAL detail from their profile. If no details exist, give a generic but natural opener.
+Write one opening line using ONLY real details from the profile. If background and intent are both not provided, use: "Hey {name}, to make this call useful — tell me about your current role and what you're hoping to get out of Scaler."
 
-⚡ *Angles that'll land*
-2-3 bullets tied to ACTUAL details provided. Skip or mark as "generic" if no specific info available.
+⚡ *What to pitch*
+Only if program or background is known. Otherwise: "Discover their goals first before pitching any program."
 
-🛡 *Objections to expect*
-2-3 likely objections based on their profile. If profile is thin, list common objections for a cold lead.
+🛡 *Likely objections*
+List 1-3 common objections relevant to what IS known. If profile is empty, list generic cold-lead objections only.
 
-⚠️ *Gaps / watch out*
-Flag clearly what information is MISSING (background, intent, LinkedIn etc.) that the BDA needs to uncover.
+⚠️ *What you don't know yet*
+List every field that was "Not provided" — these are gaps the BDA must uncover in the first 2 minutes.
 
-Keep the whole thing under 250 words. No corporate language. Write for someone reading on a phone."""
+Under 200 words total. No corporate filler."""
+
 
 def generate_nudge(name: str, background: str, intent: str, program: str, linkedin: str, extracted: dict) -> str:
     import json
-    has_profile = any([background.strip(), intent.strip(), linkedin.strip()])
-    if not has_profile:
-        return (
-            f"👤 *Who they are*\nBackground not provided — confirm name, role, and company at the start of the call.\n\n"
-            f"🎯 *Why they're here (real reason)*\nIntent unknown — ask early: \"What made you reach out to Scaler right now?\"\n\n"
-            f"💬 *Open with this*\n\"Hey {name}, thanks for connecting! To make this call useful for you — can you tell me a bit about your current role and what you're looking to achieve?\"\n\n"
-            f"⚡ *Angles that'll land*\n- Once you know their background, pitch the relevant program\n- Emphasise cohort quality and placement network\n- Real projects and mentor access\n\n"
-            f"🛡 *Objections to expect*\n- \"I need to think about it\" → Ask what specifically is unclear\n- \"It's expensive\" → Frame as investment vs. current trajectory\n- \"I'm already learning online\" → Ask what's missing from self-study\n\n"
-            f"⚠️ *Gaps / watch out*\nNo background, intent, or LinkedIn provided. First 2 minutes of the call should be discovery — don't pitch until you know their situation."
-        )
-
     resp = client.chat.completions.create(
         model="gpt-4o",
-        max_tokens=800,
+        max_tokens=600,
+        temperature=0,  # zero temperature = no creativity, no hallucination
         messages=[
             {"role": "system", "content": SYSTEM},
             {"role": "user", "content": PROMPT.format(
                 name=name,
-                background=background or "Not provided",
-                intent=intent or "Not provided",
-                program=program or "Not specified",
-                linkedin=linkedin or "Not provided",
-                extracted=json.dumps(extracted, indent=2)
+                background=background.strip() or "Not provided",
+                intent=intent.strip() or "Not provided",
+                program=program.strip() or "Not provided",
+                linkedin=linkedin.strip() or "Not provided",
+                extracted=json.dumps(extracted, indent=2) if extracted else "None"
             )}
         ]
     )
