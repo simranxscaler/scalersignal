@@ -108,6 +108,7 @@ export default function Dashboard() {
                 <th className="text-left px-4 py-3 text-xs font-semibold text-scaler-slate">Lead</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-scaler-slate">Background</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-scaler-slate">Status</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-scaler-slate">Program</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-scaler-slate">Call Scheduled (IST)</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-scaler-slate">Added</th>
                 <th className="px-4 py-3 text-xs font-semibold text-scaler-slate">Action</th>
