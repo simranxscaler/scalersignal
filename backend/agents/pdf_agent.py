@@ -32,65 +32,71 @@ say "I can confirm this with data — let me follow up" rather than fabricating.
 """
 
 SYSTEM = f"""You are generating a personalised post-call PDF for a Scaler lead.
-The PDF must directly address THIS lead's specific questions and situation.
-It must read visibly differently from any other lead's PDF.
+
+ABSOLUTE RULES — no exceptions:
+1. Only use information explicitly stated in the lead profile and call intelligence below.
+2. Never infer, assume, guess, or invent ANY detail — role, company, salary, motivation, concern — unless it is directly quoted or stated.
+3. If a field is "Not provided" or empty, do not fill it in. Omit that angle entirely or note it as unknown.
+4. Do not use words like "likely", "probably", "seems", "may", "could be", "perhaps" — these mean you are guessing.
+5. ROI numbers: only use if a salary figure was explicitly mentioned. Otherwise omit the roi_calc or write "Not discussed on call."
+6. Sections must only address questions/concerns that actually came up in the call intelligence. Do not invent concerns.
 
 {SCALER_FACT_SHEET}
 
 Return ONLY valid JSON — no markdown fences, no explanation outside the JSON."""
 
-PROMPT = """Generate a personalised PDF content structure for this lead.
+PROMPT = """Generate a personalised PDF content structure for this lead based STRICTLY on what is provided below.
 
-LEAD PROFILE:
+LEAD PROFILE (treat any "Not provided" field as unknown — do not fill in):
 Name: {name}
 Background: {background}
 Intent: {intent}
 Interested Program: {program}
 LinkedIn: {linkedin}
 
-EXTRACTED CALL INTELLIGENCE:
+EXTRACTED CALL INTELLIGENCE (the only source of truth for what was discussed):
 {extracted}
 
 Return this exact JSON structure:
 {{
-  "headline": "a personalised headline that could only be for this specific person",
-  "subheadline": "one sentence that captures their specific situation and what this PDF addresses",
+  "headline": "personalised headline using only real details from above — if no details exist, use their name and program only",
+  "subheadline": "one sentence based only on stated background and intent — no invented context",
   "sections": [
     {{
       "title": "section title",
-      "body": "2-4 sentences addressing this lead's specific question/concern with real evidence",
-      "evidence": "specific data point, alumni example, or curriculum detail that backs this up — or state what you'd confirm"
+      "body": "2-4 sentences addressing a real question/concern from the call intelligence. If no specific concerns were raised, address the program's fit for the stated background only.",
+      "evidence": "cite only facts from the SCALER FACT SHEET above — no invented alumni names, percentages, or salary data"
     }}
   ],
   "roi_calc": {{
-    "current_ctc": "inferred from background",
-    "realistic_target": "based on persona and program",
-    "reasoning": "2-3 sentences of honest ROI reasoning for this specific person"
+    "current_ctc": "only if explicitly mentioned on call — otherwise: 'Not discussed'",
+    "realistic_target": "only if explicitly mentioned on call — otherwise: 'Not discussed'",
+    "reasoning": "only include if salary was discussed — otherwise omit this field entirely"
   }},
   "next_step": {{
-    "cta": "personalised call-to-action — not generic",
-    "urgency_hook": "honest, specific reason to act now — not fake urgency"
+    "cta": "specific next step based on what was agreed on the call — or generic if nothing agreed",
+    "urgency_hook": "only use a real reason — upcoming batch date from fact sheet, or omit if none applies"
   }},
-  "cover_message": "short WhatsApp message (2-3 sentences) from BDA to lead, personalised, conversational — this is what the BDA sends WITH the PDF"
+  "cover_message": "2-3 sentence WhatsApp message from BDA to lead using only their real name and stated intent — no invented personalisation"
 }}
 
-Create 3-5 sections. Each section must address a real question or concern from the extracted data.
-The headline must be something that would make this specific lead stop scrolling."""
+Create 3-5 sections. Base every section on actual call content. If call intelligence is sparse, fewer sections is better than invented ones."""
 
 def generate_pdf_content(name: str, background: str, intent: str, program: str, linkedin: str, extracted: dict) -> dict:
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
         max_tokens=2000,
+        temperature=0,  # zero temperature = no creativity, no hallucination
         response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": SYSTEM},
             {"role": "user", "content": PROMPT.format(
                 name=name,
-                background=background,
-                intent=intent,
-                program=program or "Not specified",
-                linkedin=linkedin or "Not provided",
-                extracted=json.dumps(extracted, indent=2)
+                background=background.strip() or "Not provided",
+                intent=intent.strip() or "Not provided",
+                program=program.strip() or "Not provided",
+                linkedin=linkedin.strip() or "Not provided",
+                extracted=json.dumps(extracted, indent=2) if extracted else "No call intelligence available"
             )}
         ]
     )
