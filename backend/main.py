@@ -312,6 +312,8 @@ async def complete_call(
     if not transcript:
         raise HTTPException(status_code=400, detail="Provide either a transcript or an audio file")
 
+    print(f"[complete-call] transcript received, length={len(transcript)}")
+
     # ── Scaler call verification ─────────────────────────────────────────────
     # Check transcript is actually a Scaler sales call before doing anything
     try:
@@ -349,10 +351,13 @@ Return: {{"is_scaler_call": true/false, "reason": "one sentence explanation", "l
     except Exception:
         pass
 
+    print(f"[complete-call] starting extraction")
     # Extract call intelligence
     try:
         extracted = extract(transcript)
+        print(f"[complete-call] extraction done: {list(extracted.keys())}")
     except Exception as e:
+        print(f"[complete-call] extraction error: {e}")
         raise HTTPException(status_code=500, detail=f"Extraction failed: {str(e)}")
 
     linkedin_for_llm = lead.get("linkedin_summary") or lead.get("linkedin_url") or ""
