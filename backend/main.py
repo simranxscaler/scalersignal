@@ -27,6 +27,14 @@ from services.linkedin_svc import scrape_profile
 
 GAS_URL = os.environ.get('GAS_URL', '')
 
+def _drive_download_url(view_url: str) -> str:
+    """Convert a Drive view URL to a direct download URL for Twilio."""
+    import re
+    m = re.search(r'/d/([^/]+)', view_url)
+    if m:
+        return f"https://drive.google.com/uc?export=download&id={m.group(1)}"
+    return view_url
+
 # Firebase Admin — for verifying BDA tokens
 _fb_cert = os.environ.get('FIREBASE_SERVICE_ACCOUNT_JSON')
 if _fb_cert and not firebase_admin._apps:
@@ -487,7 +495,6 @@ Return: {{"is_scaler_call": true/false, "reason": "one sentence explanation", "l
         pdf_record = insert_pdf({
             "lead_id": lead_id,
             "pdf_url": pdf_url,
-            "pdf_download_url": pdf_download_url,
             "status": "pending_approval",
             "cover_message": cover_message
         })
@@ -569,7 +576,7 @@ async def approve(req: ApprovalRequest):
 
         print(f"[approve] lead={lead and lead.get('name')} phone={lead and lead.get('phone')}")
         if lead and lead.get("phone"):
-            twilio_url = pdf_record.get("pdf_download_url") or pdf_record.get("pdf_url") or req.pdf_download_url or req.pdf_url
+            twilio_url = _drive_download_url(pdf_record.get("pdf_url") or req.pdf_url or "")
             print(f"[approve] sending PDF to {lead['phone']} via {twilio_url}")
             send_pdf(lead["phone"], message, twilio_url)
         else:
@@ -631,7 +638,7 @@ async def resend_pdf_by_lead(lead_id: str, request: Request, req: ResendRequest 
 
     print(f"[resend-by-lead] lead={lead['name']} pdf_id={pdf_record['id']}")
     try:
-        twilio_url = pdf_record.get("pdf_download_url") or pdf_record["pdf_url"]
+        twilio_url = _drive_download_url(pdf_record["pdf_url"])
         message = (req and req.edited_message) or pdf_record.get("cover_message") or f"Hi {lead['name']}, here's your personalised Scaler overview."
         send_pdf(lead["phone"], message, twilio_url)
         update_pdf_status(pdf_record["id"], "sent")
@@ -664,7 +671,7 @@ async def resend_pdf(pdf_id: str, req: ResendRequest, request: Request):
         if not lead.get("phone"):
             raise HTTPException(status_code=400, detail="Lead has no phone number")
 
-        twilio_url = pdf_record.get("pdf_download_url") or pdf_record["pdf_url"]
+        twilio_url = _drive_download_url(pdf_record["pdf_url"])
         print(f"[resend] sending to {lead['phone']} via {twilio_url}")
         send_pdf(lead["phone"], message, twilio_url)
         update_pdf_status(pdf_id, "sent")
