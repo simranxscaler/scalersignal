@@ -183,7 +183,7 @@ async def scrape_linkedin_endpoint(request: Request):
     try:
         data = await asyncio.to_thread(scrape_profile, url)
         if not data:
-            raise HTTPException(status_code=422, detail="Could not fetch profile — LinkedIn may be blocking the request. Make sure LINKEDIN_USERNAME and LINKEDIN_PASSWORD are set in the backend environment.")
+            raise HTTPException(status_code=422, detail="Could not fetch profile — make sure LINKEDIN_COOKIES is set in Railway (run scripts/linkedin_login.py locally to generate it).")
         return {"summary": data.get("raw_summary", ""), "headline": data.get("headline", "")}
     except HTTPException:
         raise
