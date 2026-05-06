@@ -587,14 +587,31 @@ async def approve(req: ApprovalRequest):
         raise HTTPException(status_code=500, detail=f"WhatsApp send failed: {str(e)}")
 
 
+# ── Get latest PDF for a lead ─────────────────────────────────────────────────
+
+@app.get("/api/leads/{lead_id}/pdf")
+async def get_lead_pdf(lead_id: str, request: Request):
+    """Return the latest PDF record for a lead."""
+    bda_email = await get_bda_email(request)
+    from services.supabase_svc import SUPABASE_URL, _headers
+    lr = httpx.get(f"{SUPABASE_URL}/rest/v1/leads?id=eq.{lead_id}&bda_email=eq.{bda_email}&select=id", headers=_headers())
+    if not (lr.status_code == 200 and lr.json()):
+        raise HTTPException(status_code=404, detail="Lead not found")
+    pr = httpx.get(f"{SUPABASE_URL}/rest/v1/pdfs?lead_id=eq.{lead_id}&order=created_at.desc&limit=1", headers=_headers())
+    pdfs = pr.json() if pr.status_code == 200 else []
+    if not pdfs:
+        raise HTTPException(status_code=404, detail="No PDF found for this lead")
+    return pdfs[0]
+
+
 # ── Resend WhatsApp ──────────────────────────────────────────────────────────
 
 class ResendRequest(BaseModel):
     edited_message: Optional[str] = None
 
 @app.post("/api/leads/{lead_id}/resend-pdf")
-async def resend_pdf_by_lead(lead_id: str, request: Request):
-    """Resend the latest PDF for a lead — convenience endpoint called from the dashboard."""
+async def resend_pdf_by_lead(lead_id: str, request: Request, req: ResendRequest = None):
+    """Resend the latest PDF for a lead with optional edited message."""
     bda_email = await get_bda_email(request)
     from services.supabase_svc import SUPABASE_URL, _headers
 
@@ -615,7 +632,7 @@ async def resend_pdf_by_lead(lead_id: str, request: Request):
     print(f"[resend-by-lead] lead={lead['name']} pdf_id={pdf_record['id']}")
     try:
         twilio_url = pdf_record.get("pdf_download_url") or pdf_record["pdf_url"]
-        message = pdf_record.get("cover_message", f"Hi {lead['name']}, here's your personalised Scaler overview.")
+        message = (req and req.edited_message) or pdf_record.get("cover_message") or f"Hi {lead['name']}, here's your personalised Scaler overview."
         send_pdf(lead["phone"], message, twilio_url)
         update_pdf_status(pdf_record["id"], "sent")
         print(f"[resend-by-lead] sent ok")

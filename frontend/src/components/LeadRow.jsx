@@ -575,6 +575,135 @@ function CallDoneModal({ lead, onClose, onRefresh }) {
   )
 }
 
+// ── Resend Modal ─────────────────────────────────────────────────────────────
+
+function ResendModal({ lead, onClose, onRefresh }) {
+  const { user } = useAuth()
+  const [pdfRecord, setPdfRecord] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [editedMessage, setEditedMessage] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    async function fetchPdf() {
+      try {
+        const token = await user.getIdToken()
+        const r = await fetch(`${API}/api/bda/leads`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        const data = await r.json()
+        // Get the PDF record for this lead via a separate fetch
+        const pr = await fetch(`${API}/api/leads/${lead.id}/pdf`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        if (pr.ok) {
+          const pdf = await pr.json()
+          setPdfRecord(pdf)
+          setEditedMessage(pdf.cover_message || '')
+        }
+      } catch (e) {
+        setError('Could not load PDF record.')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchPdf()
+  }, [])
+
+  async function handleResend() {
+    setSending(true)
+    setError('')
+    try {
+      const token = await user.getIdToken()
+      const res = await fetch(`${API}/api/leads/${lead.id}/resend-pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ edited_message: editedMessage }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.detail || 'Send failed')
+      }
+      setSent(true)
+      onRefresh()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+        <div className="px-6 py-5 border-b border-scaler-border flex items-center justify-between">
+          <div>
+            <h2 className="text-scaler-oxford font-semibold">Resend PDF — {lead.name}</h2>
+            <p className="text-scaler-slate text-xs mt-0.5">Edit the WhatsApp message and resend the PDF</p>
+          </div>
+          <button onClick={onClose} className="text-scaler-slate hover:text-scaler-oxford text-xl leading-none">×</button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {sent ? (
+            <div className="flex flex-col items-center gap-3 py-8">
+              <span className="text-4xl">✅</span>
+              <p className="text-scaler-oxford font-semibold">PDF resent on WhatsApp</p>
+              <button onClick={onClose} className="text-sm text-scaler-blue hover:underline">Close</button>
+            </div>
+          ) : loading ? (
+            <div className="flex justify-center py-8">
+              <div className="w-6 h-6 border-2 border-scaler-blue border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : (
+            <>
+              {pdfRecord?.pdf_url && (
+                <>
+                  <div className="rounded-xl overflow-hidden border border-scaler-border bg-scaler-cultured">
+                    <iframe
+                      src={pdfRecord.pdf_url.replace('/view', '/preview').replace('?usp=sharing', '')}
+                      className="w-full h-64"
+                      title="PDF Preview"
+                      allow="autoplay"
+                    />
+                  </div>
+                  <a href={pdfRecord.pdf_url} target="_blank" rel="noreferrer"
+                    className="text-scaler-blue text-xs hover:underline block text-right">
+                    Open full PDF →
+                  </a>
+                </>
+              )}
+
+              <div>
+                <label className="text-xs text-scaler-slate font-medium block mb-2">WhatsApp Message</label>
+                <textarea
+                  value={editedMessage}
+                  onChange={e => setEditedMessage(e.target.value)}
+                  rows={4}
+                  className="w-full bg-scaler-cultured border border-scaler-border rounded-lg px-3 py-2.5 text-scaler-oxford text-sm focus:outline-none focus:border-scaler-blue resize-none"
+                />
+              </div>
+
+              {error && <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-red-700 text-sm">{error}</div>}
+
+              <button
+                onClick={handleResend}
+                disabled={sending}
+                className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
+              >
+                {sending ? 'Sending...' : 'Resend PDF on WhatsApp'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 // ── Table Row ────────────────────────────────────────────────────────────────
 
 const PROGRAMS = ['Academy', 'DSML', 'DevOps & AI', 'Online MBA']
@@ -599,6 +728,7 @@ export default function LeadRow({ lead, pdfStatus, onRefresh, isLast }) {
   const { user } = useAuth()
   const [showDrawer, setShowDrawer] = useState(false)
   const [showCallModal, setShowCallModal] = useState(false)
+  const [showResendModal, setShowResendModal] = useState(false)
   const [program, setProgram] = useState(lead.program || '')
   const [savingProgram, setSavingProgram] = useState(false)
   const borderClass = isLast ? '' : 'border-b border-scaler-border'
@@ -697,14 +827,7 @@ export default function LeadRow({ lead, pdfStatus, onRefresh, isLast }) {
           )}
           {pdfStatus === 'sent' && (
             <button
-              onClick={async (e) => {
-                e.stopPropagation()
-                const token = await user.getIdToken()
-                await fetch(`${API}/api/leads/${lead.id}/resend-pdf`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                })
-              }}
+              onClick={() => setShowResendModal(true)}
               className="text-xs border border-scaler-border text-scaler-oxford font-medium px-3 py-1.5 rounded-lg hover:bg-scaler-cultured transition-colors whitespace-nowrap"
             >
               Resend PDF
@@ -728,6 +851,14 @@ export default function LeadRow({ lead, pdfStatus, onRefresh, isLast }) {
           lead={lead}
           onClose={() => setShowCallModal(false)}
           onRefresh={() => { setShowCallModal(false); onRefresh() }}
+        />
+      )}
+
+      {showResendModal && (
+        <ResendModal
+          lead={lead}
+          onClose={() => setShowResendModal(false)}
+          onRefresh={() => { setShowResendModal(false); onRefresh() }}
         />
       )}
     </>
