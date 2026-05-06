@@ -239,6 +239,20 @@ VALID_PROGRAMS = {'Academy', 'DSML', 'DevOps & AI', 'Online MBA'}
 class UpdateProgramRequest(BaseModel):
     program: Optional[str] = None
 
+class UpdatePhoneRequest(BaseModel):
+    phone: str
+
+@app.patch("/api/leads/{lead_id}/phone")
+async def update_phone(lead_id: str, req: UpdatePhoneRequest, request: Request):
+    bda_email = await get_bda_email(request)
+    from services.supabase_svc import SUPABASE_URL, _headers
+    r = httpx.get(f"{SUPABASE_URL}/rest/v1/leads?id=eq.{lead_id}&bda_email=eq.{bda_email}", headers=_headers())
+    if not (r.status_code == 200 and r.json()):
+        raise HTTPException(status_code=404, detail="Lead not found")
+    phone = req.phone.strip().replace(" ", "").replace("-", "")
+    update_lead(lead_id, {"phone": phone})
+    return {"status": "ok", "phone": phone}
+
 @app.patch("/api/leads/{lead_id}/program")
 async def update_program(lead_id: str, req: UpdateProgramRequest, request: Request):
     bda_email = await get_bda_email(request)

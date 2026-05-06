@@ -49,6 +49,9 @@ function LeadDrawer({ lead, pdfStatus, onClose, onMarkCallDone, onScheduleSave }
   const [scheduleValue, setScheduleValue] = useState(utcToISTLocal(lead.call_scheduled_at))
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [phone, setPhone] = useState(lead.phone || '')
+  const [editingPhone, setEditingPhone] = useState(false)
+  const [savingPhone, setSavingPhone] = useState(false)
   const [nudges, setNudges] = useState([])
   const [nudgesLoading, setNudgesLoading] = useState(true)
   const [expandedNudge, setExpandedNudge] = useState(null)
@@ -102,6 +105,22 @@ function LeadDrawer({ lead, pdfStatus, onClose, onMarkCallDone, onScheduleSave }
     }
   }
 
+  async function savePhone() {
+    setSavingPhone(true)
+    try {
+      const token = await user.getIdToken()
+      await fetch(`${API}/api/leads/${lead.id}/phone`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ phone }),
+      })
+      setEditingPhone(false)
+      onScheduleSave()
+    } finally {
+      setSavingPhone(false)
+    }
+  }
+
   const skills = Array.isArray(lead.linkedin_skills) ? lead.linkedin_skills : []
   const experiences = Array.isArray(lead.linkedin_experiences) ? lead.linkedin_experiences : []
   const education = Array.isArray(lead.linkedin_education) ? lead.linkedin_education : []
@@ -122,7 +141,31 @@ function LeadDrawer({ lead, pdfStatus, onClose, onMarkCallDone, onScheduleSave }
                 {meta.label}
               </span>
             </div>
-            <p className="text-sm text-scaler-slate">{lead.phone}</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              {editingPhone ? (
+                <>
+                  <input
+                    value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    className="text-sm border border-scaler-border rounded-md px-2 py-0.5 w-36 focus:outline-none focus:border-scaler-blue"
+                    placeholder="10-digit number"
+                    maxLength={15}
+                  />
+                  <button onClick={savePhone} disabled={savingPhone}
+                    className="text-xs text-white bg-scaler-blue px-2 py-0.5 rounded-md disabled:opacity-50">
+                    {savingPhone ? '...' : 'Save'}
+                  </button>
+                  <button onClick={() => { setEditingPhone(false); setPhone(lead.phone || '') }}
+                    className="text-xs text-scaler-slate hover:text-scaler-oxford">Cancel</button>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-scaler-slate">{phone || lead.phone}</p>
+                  <button onClick={() => setEditingPhone(true)}
+                    className="text-xs text-scaler-blue hover:underline">Edit</button>
+                </>
+              )}
+            </div>
             {lead.program && (
               <span className="inline-block mt-1.5 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium">
                 {lead.program}

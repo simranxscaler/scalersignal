@@ -8,10 +8,8 @@ def _from():
     return f"whatsapp:{os.environ['TWILIO_WHATSAPP_FROM']}"
 
 def _normalize(phone: str) -> str:
-    """Ensure phone has +91 country code for Indian numbers."""
-    p = phone.strip().replace(" ", "").replace("-", "")
-    if p.startswith("+"):
-        return p
+    """Ensure phone has +91 country code. Always adds +91 for 10-digit Indian numbers."""
+    p = phone.strip().replace(" ", "").replace("-", "").replace("+", "")
     if p.startswith("91") and len(p) == 12:
         return f"+{p}"
     if len(p) == 10:
