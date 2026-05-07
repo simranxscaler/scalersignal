@@ -331,11 +331,32 @@ function LeadDrawer({ lead, pdfStatus, onClose, onMarkCallDone, onScheduleSave }
           </Section>
 
           {/* Transcript */}
-          {lead.transcript && (
+          {(lead.transcript_diarized || lead.transcript) && (
             <Section title="Call Transcript">
-              <p className="text-xs text-scaler-slate leading-relaxed whitespace-pre-line max-h-40 overflow-y-auto pr-1">
-                {lead.transcript}
-              </p>
+              {lead.transcript_diarized ? (
+                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                  {lead.transcript_diarized.split('\n').filter(Boolean).map((line, i) => {
+                    const isBda = line.startsWith('BDA:')
+                    const colon = line.indexOf(':')
+                    const speaker = colon > -1 ? line.slice(0, colon) : ''
+                    const text = colon > -1 ? line.slice(colon + 1).trim() : line
+                    return (
+                      <div key={i} className={`flex gap-2 ${isBda ? '' : 'flex-row-reverse'}`}>
+                        <span className={`text-[10px] font-bold shrink-0 mt-1 w-8 text-center ${isBda ? 'text-scaler-blue' : 'text-violet-600'}`}>
+                          {isBda ? 'BDA' : speaker}
+                        </span>
+                        <p className={`text-xs leading-relaxed rounded-2xl px-3 py-2 max-w-[85%] ${isBda ? 'bg-blue-50 text-scaler-oxford' : 'bg-violet-50 text-scaler-oxford'}`}>
+                          {text}
+                        </p>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-scaler-slate leading-relaxed whitespace-pre-line max-h-40 overflow-y-auto pr-1">
+                  {lead.transcript}
+                </p>
+              )}
             </Section>
           )}
         </div>
