@@ -422,6 +422,58 @@ function Section({ title, children }) {
   )
 }
 
+// ── Transcript chat-bubble preview (shared) ──────────────────────────────────
+
+function TranscriptPreview({ transcriptDiarized, nameMismatch, warning }) {
+  const [open, setOpen] = useState(false)
+  const lines = transcriptDiarized.split('\n').filter(Boolean)
+  const collapsed = []
+  for (const line of lines) {
+    const colon = line.indexOf(':')
+    const speaker = colon > -1 ? line.slice(0, colon).trim() : ''
+    const text = colon > -1 ? line.slice(colon + 1).trim() : line
+    const prev = collapsed[collapsed.length - 1]
+    if (prev && prev.speaker === speaker && prev.text === text) { prev.count++ }
+    else collapsed.push({ speaker, text, count: 1 })
+  }
+
+  return (
+    <div className="rounded-2xl border border-scaler-border overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-scaler-cultured hover:bg-scaler-border/40 transition-colors"
+      >
+        <span className="text-xs font-semibold text-scaler-oxford">📞 Call Transcript ({collapsed.length} turns)</span>
+        <span className="text-scaler-slate text-xs">{open ? '▲ Hide' : '▼ Show'}</span>
+      </button>
+      {(nameMismatch || warning) && (
+        <div className="px-4 py-2 bg-amber-50 border-t border-amber-200 flex items-center gap-2">
+          <span className="text-amber-500 text-xs">⚠</span>
+          <p className="text-amber-800 text-xs">{warning || 'Lead name not found — check you uploaded the right recording.'}</p>
+        </div>
+      )}
+      {open && (
+        <div className="px-4 py-3 space-y-2 max-h-72 overflow-y-auto bg-white">
+          {collapsed.map(({ speaker, text, count }, i) => {
+            const isBda = speaker === 'BDA'
+            return (
+              <div key={i} className={`flex gap-2 ${isBda ? '' : 'flex-row-reverse'}`}>
+                <span className={`text-[10px] font-bold shrink-0 mt-1 w-8 text-center ${isBda ? 'text-scaler-blue' : 'text-violet-600'}`}>
+                  {speaker}
+                </span>
+                <p className={`text-xs leading-relaxed rounded-2xl px-3 py-2 max-w-[85%] ${isBda ? 'bg-blue-50 text-scaler-oxford' : 'bg-violet-50 text-scaler-oxford'}`}>
+                  {text}
+                  {count > 1 && <span className="ml-1.5 text-[10px] text-scaler-slate opacity-60">×{count}</span>}
+                </p>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Mark Call Done Modal ─────────────────────────────────────────────────────
 
 const STEPS = {
@@ -445,6 +497,7 @@ function CallDoneModal({ lead, onClose, onRefresh }) {
   const [transcriptDiarized, setTranscriptDiarized] = useState(null)
   const [nameMismatch, setNameMismatch] = useState(false)
   const [warning, setWarning] = useState(null)
+  const [sentiment, setSentiment] = useState(null)
   const [approving, setApproving] = useState(false)
   const fileRef = useRef()
 
@@ -506,6 +559,7 @@ function CallDoneModal({ lead, onClose, onRefresh }) {
       setTranscriptDiarized(data.transcript_diarized || null)
       setNameMismatch(data.name_mismatch || false)
       setWarning(data.warning || null)
+      setSentiment(data.sentiment || null)
     } catch (e) {
       clearTicker?.()
       setError(e.message)
@@ -594,12 +648,71 @@ function CallDoneModal({ lead, onClose, onRefresh }) {
             </div>
           )}
 
+          {/* ── Transcript + sentiment card after processing ── */}
+          {pdfResult && !loading && (transcriptDiarized || sentiment) && (
+            <div className="space-y-3">
+              {/* Sentiment score */}
+              {sentiment && sentiment.score !== null && (
+                <div className="rounded-2xl border border-scaler-border bg-scaler-cultured px-4 py-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-scaler-oxford uppercase tracking-wide">Lead Sentiment</span>
+                    {sentiment.call_quality && (
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                        sentiment.call_quality === 'good' ? 'text-green-700 bg-green-50 border-green-200' :
+                        sentiment.call_quality === 'poor' ? 'text-red-700 bg-red-50 border-red-200' :
+                        'text-amber-700 bg-amber-50 border-amber-200'
+                      }`}>
+                        Call quality: {sentiment.call_quality}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {/* Score dial */}
+                    <div className={`w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold border-4 shrink-0 ${
+                      sentiment.label === 'Hot' ? 'border-green-400 bg-green-50 text-green-700' :
+                      sentiment.label === 'Warm' ? 'border-amber-400 bg-amber-50 text-amber-700' :
+                      'border-red-300 bg-red-50 text-red-600'
+                    }`}>
+                      {sentiment.score}/10
+                    </div>
+                    <div className="flex-1 space-y-1.5">
+                      {/* Bar */}
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-2 bg-scaler-border rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              sentiment.label === 'Hot' ? 'bg-green-500' :
+                              sentiment.label === 'Warm' ? 'bg-amber-400' : 'bg-red-400'
+                            }`}
+                            style={{ width: `${sentiment.score * 10}%` }}
+                          />
+                        </div>
+                        <span className={`text-xs font-bold ${
+                          sentiment.label === 'Hot' ? 'text-green-600' :
+                          sentiment.label === 'Warm' ? 'text-amber-600' : 'text-red-500'
+                        }`}>{sentiment.label}</span>
+                      </div>
+                      {sentiment.emotional_state && (
+                        <p className="text-xs text-scaler-slate italic leading-snug">"{sentiment.emotional_state}"</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Transcript preview — collapsible */}
+              {transcriptDiarized && (
+                <TranscriptPreview transcriptDiarized={transcriptDiarized} nameMismatch={nameMismatch} warning={warning} />
+              )}
+            </div>
+          )}
+
           {/* ── PDF preview after success ── */}
           {pdfResult && !loading ? (
             <PDFPreview
               pdfData={pdfResult}
               lead={lead}
-              transcriptDiarized={transcriptDiarized}
+              transcriptDiarized={null}
               nameMismatch={nameMismatch}
               warning={warning}
               onApprove={handleApproval}

@@ -563,6 +563,12 @@ Return: {{"is_scaler_call": true/false, "reason": "one sentence explanation", "l
         "transcript_diarized": transcript_diarized,
         "name_mismatch": name_mismatch,
         "warning": verification_warning,
+        "sentiment": {
+            "score": extracted.get("sentiment_score", None),
+            "label": extracted.get("sentiment_label", None),
+            "call_quality": extracted.get("call_quality", None),
+            "emotional_state": extracted.get("emotional_state", ""),
+        },
     }
 
 

@@ -40,6 +40,10 @@ ABSOLUTE RULES:
 5. emotional_state: describe only what is observable from the words used — not assumed feelings.
 6. key_context: only facts explicitly stated. No assumptions about their situation.
 7. If the transcript is too short or vague to extract something, leave that field empty — do not fill it in.
+8. sentiment_score: integer 0-10 rating the lead's overall buying intent and positivity based strictly on their words.
+   0 = hostile/zero interest, 5 = neutral/curious, 10 = highly engaged and ready to move forward.
+9. sentiment_label: one of "Hot" | "Warm" | "Cold" matching the score (7-10 = Hot, 4-6 = Warm, 0-3 = Cold).
+10. call_quality: one of "good" | "average" | "poor" — assess how well the BDA handled the call (did they listen, address objections, build rapport?).
 
 Return ONLY valid JSON — no markdown, no explanation."""
 
@@ -51,7 +55,10 @@ PROMPT = """Extract structured intelligence from this sales call transcript. Onl
   "intent_signals": ["direct quotes showing interest or readiness — empty if none"],
   "emotional_state": "observable tone from words used — not assumed feelings. Empty string if unclear.",
   "persona_type": "one of: career_switcher | senior_explorer | fresher_anxious | re_activation — only if clearly evident from transcript",
-  "key_context": "facts explicitly stated in the transcript only — no assumptions. Empty string if insufficient data."
+  "key_context": "facts explicitly stated in the transcript only — no assumptions. Empty string if insufficient data.",
+  "sentiment_score": 0,
+  "sentiment_label": "Cold | Warm | Hot",
+  "call_quality": "good | average | poor"
 }}
 
 Transcript:
