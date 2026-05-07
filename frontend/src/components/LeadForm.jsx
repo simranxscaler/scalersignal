@@ -220,37 +220,6 @@ export default function LeadForm({ onSubmit, loading, error }) {
               placeholder="Want to switch to product company, interested in AI engineering roles" className={inputClass} />
           </div>
 
-          <div>
-            <label className="block text-xs text-scaler-slate font-medium mb-1">
-              LinkedIn URL <span className="text-scaler-slate/60 font-normal">(optional)</span>
-            </label>
-            <div className="flex gap-2">
-              <input
-                name="linkedin"
-                value={form.linkedin}
-                onChange={handleChange}
-                placeholder="https://linkedin.com/in/rohan-sharma"
-                className={inputClass}
-              />
-              {isLinkedInUrl && (
-                <button
-                  type="button"
-                  onClick={scrapeLinkedIn}
-                  disabled={scraping}
-                  className="shrink-0 bg-scaler-blue text-white text-xs font-semibold px-3 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                >
-                  {scraping ? '...' : 'Scrape'}
-                </button>
-              )}
-            </div>
-
-            {linkedinSummary && (
-              <div className="mt-2 bg-scaler-cultured border border-scaler-border rounded-lg px-3 py-2.5">
-                <p className="text-xs text-scaler-slate font-medium mb-1">LinkedIn Summary</p>
-                <p className="text-xs text-scaler-oxford whitespace-pre-wrap">{linkedinSummary}</p>
-              </div>
-            )}
-          </div>
         </div>
 
         {error && (
