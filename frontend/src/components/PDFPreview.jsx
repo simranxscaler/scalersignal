@@ -1,9 +1,37 @@
 import { useState } from 'react'
+import { useAuth } from '../context/AuthContext'
 
-export default function PDFPreview({ pdfData, onApprove, loading }) {
+const API = import.meta.env.VITE_API_URL || ''
+
+export default function PDFPreview({ pdfData, lead: initialLead, transcriptDiarized, nameMismatch, warning, onApprove, loading }) {
+  const { user } = useAuth()
   const [editMode, setEditMode] = useState(false)
   const [editedMessage, setEditedMessage] = useState(pdfData.cover_message)
   const [action, setAction] = useState(null)
+  const [showTranscript, setShowTranscript] = useState(false)
+
+  // Phone editing
+  const [lead, setLead] = useState(initialLead)
+  const [editingPhone, setEditingPhone] = useState(false)
+  const [phoneValue, setPhoneValue] = useState(initialLead?.phone || '')
+  const [savingPhone, setSavingPhone] = useState(false)
+
+  async function savePhone() {
+    if (!lead) return
+    setSavingPhone(true)
+    try {
+      const token = await user.getIdToken()
+      await fetch(`${API}/api/leads/${lead.id}/phone`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ phone: phoneValue }),
+      })
+      setLead({ ...lead, phone: phoneValue })
+      setEditingPhone(false)
+    } finally {
+      setSavingPhone(false)
+    }
+  }
 
   if (action === 'skipped') {
     return (
@@ -31,7 +59,57 @@ export default function PDFPreview({ pdfData, onApprove, loading }) {
         <h3 className="text-sm font-semibold text-scaler-oxford">Lead PDF — Awaiting BDA Approval</h3>
       </div>
 
-      {/* PDF Preview — convert Drive view URL to embed URL */}
+      {/* Name mismatch warning */}
+      {(nameMismatch || warning) && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl px-4 py-3 flex items-start gap-2">
+          <span className="text-amber-500 text-base leading-none mt-0.5">⚠</span>
+          <p className="text-amber-800 text-xs leading-relaxed">{warning || "Lead name not found in transcript — check you uploaded the right recording."}</p>
+        </div>
+      )}
+
+      {/* Phone number row */}
+      {lead && (
+        <div className="flex items-center gap-2 bg-scaler-cultured border border-scaler-border rounded-xl px-3 py-2.5">
+          <span className="text-scaler-slate text-xs font-medium shrink-0">WhatsApp</span>
+          {editingPhone ? (
+            <>
+              <input
+                type="tel"
+                value={phoneValue}
+                onChange={e => setPhoneValue(e.target.value)}
+                maxLength={15}
+                className="flex-1 bg-white border border-scaler-blue/40 rounded-lg px-2 py-1 text-scaler-oxford text-sm focus:outline-none focus:border-scaler-blue min-w-0"
+                autoFocus
+              />
+              <button
+                onClick={savePhone}
+                disabled={savingPhone}
+                className="text-xs bg-scaler-blue text-white font-semibold px-3 py-1 rounded-lg disabled:opacity-50 shrink-0"
+              >
+                {savingPhone ? '...' : 'Save'}
+              </button>
+              <button
+                onClick={() => { setEditingPhone(false); setPhoneValue(lead.phone || '') }}
+                className="text-xs text-scaler-slate hover:text-scaler-oxford shrink-0"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="flex-1 text-scaler-oxford text-sm font-medium">{lead.phone || <span className="text-red-500">No number set</span>}</span>
+              <button
+                onClick={() => setEditingPhone(true)}
+                className="text-xs text-scaler-blue hover:underline shrink-0"
+              >
+                Edit
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* PDF Preview */}
       <div className="rounded-xl overflow-hidden border border-scaler-border bg-scaler-cultured">
         <iframe
           src={pdfData.pdf_url.replace('/view', '/preview').replace('?usp=sharing', '')}
@@ -44,6 +122,36 @@ export default function PDFPreview({ pdfData, onApprove, loading }) {
         className="text-scaler-blue text-xs hover:underline block text-right">
         Open full PDF →
       </a>
+
+      {/* Call transcript toggle */}
+      {transcriptDiarized && (
+        <div>
+          <button
+            onClick={() => setShowTranscript(v => !v)}
+            className="w-full flex items-center justify-between bg-scaler-cultured border border-scaler-border rounded-xl px-3 py-2.5 text-xs font-medium text-scaler-oxford hover:bg-scaler-border/40 transition-colors"
+          >
+            <span>📞 View call transcript</span>
+            <span className="text-scaler-slate">{showTranscript ? '▲' : '▼'}</span>
+          </button>
+          {showTranscript && (
+            <div className="mt-2 bg-scaler-cultured border border-scaler-border rounded-xl px-4 py-3 max-h-64 overflow-y-auto">
+              {transcriptDiarized.split('\n').filter(Boolean).map((line, i) => {
+                const isBda = line.startsWith('BDA:')
+                return (
+                  <div key={i} className={`mb-2 flex gap-2 ${isBda ? '' : 'flex-row-reverse'}`}>
+                    <span className={`text-[10px] font-semibold shrink-0 mt-0.5 ${isBda ? 'text-scaler-blue' : 'text-violet-600'}`}>
+                      {isBda ? 'BDA' : line.split(':')[0]}
+                    </span>
+                    <p className={`text-xs text-scaler-oxford leading-relaxed rounded-xl px-3 py-1.5 max-w-[85%] ${isBda ? 'bg-blue-50' : 'bg-violet-50'}`}>
+                      {line.includes(':') ? line.slice(line.indexOf(':') + 1).trim() : line}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Cover message */}
       <div>

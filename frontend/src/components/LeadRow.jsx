@@ -407,6 +407,9 @@ function CallDoneModal({ lead, onClose, onRefresh }) {
   const [error, setError] = useState('')
   const [notScaler, setNotScaler] = useState(null)   // { reason } if wrong call
   const [pdfResult, setPdfResult] = useState(null)
+  const [transcriptDiarized, setTranscriptDiarized] = useState(null)
+  const [nameMismatch, setNameMismatch] = useState(false)
+  const [warning, setWarning] = useState(null)
   const [approving, setApproving] = useState(false)
   const fileRef = useRef()
 
@@ -465,6 +468,9 @@ function CallDoneModal({ lead, onClose, onRefresh }) {
       }
 
       setPdfResult(data.pdf)
+      setTranscriptDiarized(data.transcript_diarized || null)
+      setNameMismatch(data.name_mismatch || false)
+      setWarning(data.warning || null)
     } catch (e) {
       clearTicker?.()
       setError(e.message)
@@ -555,7 +561,15 @@ function CallDoneModal({ lead, onClose, onRefresh }) {
 
           {/* ── PDF preview after success ── */}
           {pdfResult && !loading ? (
-            <PDFPreview pdfData={pdfResult} onApprove={handleApproval} loading={approving} />
+            <PDFPreview
+              pdfData={pdfResult}
+              lead={lead}
+              transcriptDiarized={transcriptDiarized}
+              nameMismatch={nameMismatch}
+              warning={warning}
+              onApprove={handleApproval}
+              loading={approving}
+            />
           ) : !notScaler && !loading ? (
             <>
               {/* Mode toggle */}
