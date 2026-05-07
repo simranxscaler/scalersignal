@@ -425,7 +425,7 @@ function Section({ title, children }) {
 // ── Transcript chat-bubble preview (shared) ──────────────────────────────────
 
 function TranscriptPreview({ transcriptDiarized, nameMismatch, warning }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
   const lines = transcriptDiarized.split('\n').filter(Boolean)
   const collapsed = []
   for (const line of lines) {
@@ -453,7 +453,7 @@ function TranscriptPreview({ transcriptDiarized, nameMismatch, warning }) {
         </div>
       )}
       {open && (
-        <div className="px-4 py-3 space-y-2 max-h-72 overflow-y-auto bg-white">
+        <div className="px-4 py-3 space-y-2 max-h-96 overflow-y-auto bg-white">
           {collapsed.map(({ speaker, text, count }, i) => {
             const isBda = speaker === 'BDA'
             return (
