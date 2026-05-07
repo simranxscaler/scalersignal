@@ -12,7 +12,7 @@ from firebase_admin import credentials, auth as firebase_auth
 
 load_dotenv()
 
-from agents.extractor import extract
+from agents.extractor import extract, diarize
 from agents.nudge_agent import generate_nudge
 from agents.pdf_agent import generate_pdf_content
 from services.pdf_svc import build_pdf
@@ -414,9 +414,12 @@ async def complete_call(
     print(f"[complete-call] transcript received, length={len(transcript)}")
 
     # ── Scaler call verification ─────────────────────────────────────────────
-    # Check transcript is actually a Scaler sales call before doing anything
+    # Check transcript is actually a Scaler sales call before doing anything expensive
+    name_mismatch = False
+    verification_warning = None
     try:
         from openai import OpenAI as _OAI
+        import json as _json
         _oai = _OAI()
         _check = _oai.chat.completions.create(
             model="gpt-4o-mini",
@@ -425,7 +428,8 @@ async def complete_call(
             messages=[
                 {"role": "system", "content": "You verify whether a transcript is a Scaler EdTech sales call. Return JSON only."},
                 {"role": "user", "content": f"""Does this transcript appear to be a sales/counselling call related to Scaler (an EdTech company offering programs like Academy, DSML, DevOps, MBA)?
-Look for: mention of the lead's name '{lead['name']}', Scaler programs, course fees, career goals, BDA asking about background/intent.
+Look for: Scaler programs, course fees, career goals, BDA asking about background/intent.
+Also check if the lead's name '{lead['name']}' appears anywhere in the transcript.
 
 Transcript (first 1500 chars):
 {transcript[:1500]}
@@ -434,26 +438,41 @@ Return: {{"is_scaler_call": true/false, "reason": "one sentence explanation", "l
                 }
             ]
         )
-        import json as _json
         _result = _json.loads(_check.choices[0].message.content)
         if not _result.get("is_scaler_call", True):
             return {
                 "scaler_call": False,
                 "reason": _result.get("reason", "This does not appear to be a Scaler sales call.")
             }
+        if not _result.get("lead_name_found", True):
+            name_mismatch = True
+            verification_warning = f"Lead name '{lead['name']}' was not found in the transcript — you may have uploaded the wrong call recording."
+            print(f"[complete-call] WARNING: lead name not found in transcript")
     except Exception:
         pass  # If check fails, proceed anyway — don't block on verification error
 
-    # Update lead: save transcript + mark call completed
+    # ── Speaker diarization ──────────────────────────────────────────────────
+    transcript_diarized = transcript
     try:
-        update_lead(lead_id, {"transcript": transcript, "call_status": "call_completed"})
+        transcript_diarized = await asyncio.to_thread(diarize, transcript, lead["name"])
+        print(f"[complete-call] diarization done, length={len(transcript_diarized)}")
+    except Exception as e:
+        print(f"[complete-call] diarization failed (non-fatal): {e}")
+
+    # Update lead: save transcript + diarized transcript + mark call completed
+    try:
+        update_lead(lead_id, {
+            "transcript": transcript,
+            "transcript_diarized": transcript_diarized,
+            "call_status": "call_completed"
+        })
     except Exception:
         pass
 
     print(f"[complete-call] starting extraction")
-    # Extract call intelligence
+    # Extract call intelligence (use diarized transcript for better structure)
     try:
-        extracted = extract(transcript)
+        extracted = extract(transcript_diarized)
         print(f"[complete-call] extraction done: {list(extracted.keys())}")
     except Exception as e:
         print(f"[complete-call] extraction error: {e}")
@@ -541,6 +560,9 @@ Return: {{"is_scaler_call": true/false, "reason": "one sentence explanation", "l
             "status": "pending_approval"
         },
         "transcript": transcript,
+        "transcript_diarized": transcript_diarized,
+        "name_mismatch": name_mismatch,
+        "warning": verification_warning,
     }
 
 

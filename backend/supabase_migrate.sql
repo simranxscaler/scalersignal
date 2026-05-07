@@ -49,6 +49,7 @@ alter table leads add column if not exists linkedin_skills jsonb;
 alter table leads add column if not exists call_status text default 'pending_call';
 alter table leads add column if not exists call_scheduled_at timestamptz;
 alter table leads add column if not exists nudge_scheduled_sent boolean default false;
+alter table leads add column if not exists transcript_diarized text;
 alter table bdas add column if not exists whatsapp_phone text;
 
 -- Nudges table

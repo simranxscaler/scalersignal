@@ -28,6 +28,7 @@ create table if not exists leads (
   linkedin_education jsonb,    -- [{school, degree, field, start, end}]
   linkedin_skills jsonb,       -- ["Python", "ML", ...]
   transcript text,
+  transcript_diarized text,    -- speaker-labelled version: "BDA: ..." / "Name: ..."
   bda_email text,              -- which BDA owns this lead
   call_status text not null default 'pending_call'
     check (call_status in ('pending_call', 'call_completed')),
@@ -37,6 +38,7 @@ create table if not exists leads (
 -- Migration: add columns if the table already exists
 alter table leads add column if not exists program text;
 alter table leads add column if not exists transcript text;
+alter table leads add column if not exists transcript_diarized text;
 alter table leads add column if not exists linkedin_url text;
 alter table leads add column if not exists linkedin_headline text;
 alter table leads add column if not exists linkedin_institution text;
