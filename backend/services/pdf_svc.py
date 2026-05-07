@@ -125,9 +125,9 @@ def build_pdf(content: dict, lead_name: str, program: str = "") -> bytes:
     story.append(Spacer(1, 10))
     story.append(HRFlowable(width='100%', thickness=1, color=HexColor('#E2E8F0'), spaceAfter=10))
 
-    # ROI calc box
-    roi = content.get('roi_calc', {})
-    if roi:
+    # ROI calc box — only shown if salary was discussed on the call
+    roi = content.get('roi_calc')
+    if roi and isinstance(roi, dict):
         story.append(Paragraph("Your ROI Picture", style_section_title))
         roi_data = [
             [Paragraph("<b>Where you are now</b>", style_body), Paragraph(roi.get('current_ctc', '—'), style_body)],
@@ -143,7 +143,23 @@ def build_pdf(content: dict, lead_name: str, program: str = "") -> bytes:
         ]))
         story.append(roi_table)
         story.append(Spacer(1, 6))
-        story.append(Paragraph(roi.get('reasoning', ''), style_body))
+        if roi.get('reasoning'):
+            story.append(Paragraph(roi['reasoning'], style_body))
+
+    # Placement stats box — always shown, data pulled from brochure
+    placement = content.get('placement_stats', '')
+    if placement and placement != 'Placement data not available.':
+        story.append(Paragraph("Placement & Outcomes", style_section_title))
+        placement_data = [[Paragraph(placement, style_body)]]
+        placement_table = Table(placement_data, colWidths=[175*mm])
+        placement_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), HexColor('#FFF7F0')),
+            ('BOX', (0, 0), (-1, -1), 1.5, SCALER_ORANGE),
+            ('PADDING', (0, 0), (-1, -1), 10),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ]))
+        story.append(placement_table)
+        story.append(Spacer(1, 6))
 
     story.append(Spacer(1, 14))
 

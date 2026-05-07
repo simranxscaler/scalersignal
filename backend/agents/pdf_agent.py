@@ -1,37 +1,35 @@
 import json
+import os
 from openai import OpenAI
 
 client = OpenAI()
 
-SCALER_FACT_SHEET = """
-SCALER PROGRAMS — VERIFIED FACTS ONLY (do not fabricate beyond this):
+_BROCHURES_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "Scaler Courses")
 
-Scaler Academy (Flagship)
-- Duration: 12 months, part-time
-- Price: ~₹3.5L (EMI options available, ISA available for eligible candidates)
-- Target: 0–7 YoE software engineers
-- Curriculum areas: DSA, system design, LLD/HLD, backend engineering, AI/ML fundamentals
-- AI Engineering track covers: ML foundations, deep learning, LLMs, RAG systems, agents, evals, production deployment
-- Teaching: live classes, 1:1 mentorship with working engineers, peer cohorts
-- Outcomes: alumni at Google, Amazon, Flipkart, Meesho, Razorpay, PhonePe, startups
-- Placement support: resume prep, mock interviews, company referrals, 900+ hiring partners
-- Entrance test: required before enrolment — assesses problem-solving aptitude, not prior knowledge
-- Entrance test prep resources are provided to candidates
-- Financing: EMI from ₹8,000–12,000/month, ISA (pay after placement) for qualifying candidates
+_PROGRAM_TO_FILE = {
+    "academy":    "Scaler_Academy_Brochure_2026.md",
+    "dsml":       "Scaler_DSML_Brochure.md",
+    "devops":     "Scaler_DevOps_Cloud_AI_Brochure.md",
+    "devops & ai":"Scaler_DevOps_Cloud_AI_Brochure.md",
+    "online mba": "Scaler_Online_PGP_Business_AI.md",
+    "mba":        "Scaler_Online_PGP_Business_AI.md",
+    "pgp":        "Scaler_Online_PGP_Business_AI.md",
+}
 
-Scaler Data Science & ML
-- Duration: 12+ months
-- Focus: Python, statistics, ML, deep learning, NLP, MLOps
+def _load_fact_sheet(program: str) -> str:
+    key = (program or "").strip().lower()
+    filename = _PROGRAM_TO_FILE.get(key)
+    if filename:
+        path = os.path.join(_BROCHURES_DIR, filename)
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return f.read()
+        except OSError:
+            pass
+    # fallback — return a generic note so the LLM doesn't hallucinate
+    return "SCALER PROGRAM DETAILS: No brochure available for this program. Only use facts explicitly stated in the lead profile and call intelligence."
 
-Scaler DevOps & Cloud
-- Duration: 9 months
-- Focus: Linux, Docker, Kubernetes, CI/CD, AWS/GCP
-
-IMPORTANT: For any specific salary data, alumni names, or curriculum module details not listed above,
-say "I can confirm this with data — let me follow up" rather than fabricating.
-"""
-
-SYSTEM = f"""You are generating a personalised post-call PDF for a Scaler lead.
+_SYSTEM_TEMPLATE = """You are generating a personalised post-call PDF for a Scaler lead.
 
 ABSOLUTE RULES — no exceptions:
 1. Only use information explicitly stated in the lead profile and call intelligence below.
@@ -41,7 +39,8 @@ ABSOLUTE RULES — no exceptions:
 5. ROI numbers: only use if a salary figure was explicitly mentioned. Otherwise omit the roi_calc or write "Not discussed on call."
 6. Sections must only address questions/concerns that actually came up in the call intelligence. Do not invent concerns.
 
-{SCALER_FACT_SHEET}
+PROGRAM BROCHURE — VERIFIED FACTS (use ONLY facts from this brochure; do not fabricate beyond it):
+{fact_sheet}
 
 Return ONLY valid JSON — no markdown fences, no explanation outside the JSON."""
 
@@ -68,11 +67,8 @@ Return this exact JSON structure:
       "evidence": "cite only facts from the SCALER FACT SHEET above — no invented alumni names, percentages, or salary data"
     }}
   ],
-  "roi_calc": {{
-    "current_ctc": "only if explicitly mentioned on call — otherwise: 'Not discussed'",
-    "realistic_target": "only if explicitly mentioned on call — otherwise: 'Not discussed'",
-    "reasoning": "only include if salary was discussed — otherwise omit this field entirely"
-  }},
+  "roi_calc": "ONLY include this key if a specific salary or CTC figure was explicitly mentioned on the call. If salary was never discussed, OMIT this key entirely — do not include it with null or empty values. If included, use: {{ \"current_ctc\": \"stated figure\", \"realistic_target\": \"stated or brochure-backed target\", \"reasoning\": \"one sentence connecting the two\" }}",
+  "placement_stats": "ALWAYS include this key. Pull 3-5 real placement data points from the program brochure above — salary ranges, avg CTC, top companies, hike %, success stories. Format as a short paragraph. If no brochure data exists, write exactly: 'Placement data not available.'",
   "next_step": {{
     "cta": "specific next step based on what was agreed on the call — or generic if nothing agreed",
     "urgency_hook": "only use a real reason — upcoming batch date from fact sheet, or omit if none applies"
@@ -83,13 +79,15 @@ Return this exact JSON structure:
 Create 3-5 sections. Base every section on actual call content. If call intelligence is sparse, fewer sections is better than invented ones."""
 
 def generate_pdf_content(name: str, background: str, intent: str, program: str, linkedin: str, extracted: dict) -> dict:
+    fact_sheet = _load_fact_sheet(program)
+    system_prompt = _SYSTEM_TEMPLATE.format(fact_sheet=fact_sheet)
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
         max_tokens=2000,
         temperature=0,  # zero temperature = no creativity, no hallucination
         response_format={"type": "json_object"},
         messages=[
-            {"role": "system", "content": SYSTEM},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": PROMPT.format(
                 name=name,
                 background=background.strip() or "Not provided",
