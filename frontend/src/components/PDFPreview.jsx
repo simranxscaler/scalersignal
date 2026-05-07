@@ -135,19 +135,35 @@ export default function PDFPreview({ pdfData, lead: initialLead, transcriptDiari
           </button>
           {showTranscript && (
             <div className="mt-2 bg-scaler-cultured border border-scaler-border rounded-xl px-4 py-3 max-h-64 overflow-y-auto">
-              {transcriptDiarized.split('\n').filter(Boolean).map((line, i) => {
-                const isBda = line.startsWith('BDA:')
-                return (
-                  <div key={i} className={`mb-2 flex gap-2 ${isBda ? '' : 'flex-row-reverse'}`}>
-                    <span className={`text-[10px] font-semibold shrink-0 mt-0.5 ${isBda ? 'text-scaler-blue' : 'text-violet-600'}`}>
-                      {isBda ? 'BDA' : line.split(':')[0]}
-                    </span>
-                    <p className={`text-xs text-scaler-oxford leading-relaxed rounded-xl px-3 py-1.5 max-w-[85%] ${isBda ? 'bg-blue-50' : 'bg-violet-50'}`}>
-                      {line.includes(':') ? line.slice(line.indexOf(':') + 1).trim() : line}
-                    </p>
-                  </div>
-                )
-              })}
+              {(() => {
+                const raw = transcriptDiarized.split('\n').filter(Boolean)
+                const collapsed = []
+                for (const line of raw) {
+                  const colon = line.indexOf(':')
+                  const speaker = colon > -1 ? line.slice(0, colon).trim() : ''
+                  const text = colon > -1 ? line.slice(colon + 1).trim() : line
+                  const prev = collapsed[collapsed.length - 1]
+                  if (prev && prev.speaker === speaker && prev.text === text) {
+                    prev.count++
+                  } else {
+                    collapsed.push({ speaker, text, count: 1 })
+                  }
+                }
+                return collapsed.map(({ speaker, text, count }, i) => {
+                  const isBda = speaker === 'BDA'
+                  return (
+                    <div key={i} className={`mb-2 flex gap-2 ${isBda ? '' : 'flex-row-reverse'}`}>
+                      <span className={`text-[10px] font-bold shrink-0 mt-0.5 w-8 text-center ${isBda ? 'text-scaler-blue' : 'text-violet-600'}`}>
+                        {speaker}
+                      </span>
+                      <p className={`text-xs text-scaler-oxford leading-relaxed rounded-2xl px-3 py-2 max-w-[85%] ${isBda ? 'bg-blue-50' : 'bg-violet-50'}`}>
+                        {text}
+                        {count > 1 && <span className="ml-1.5 text-[10px] text-scaler-slate opacity-60">×{count}</span>}
+                      </p>
+                    </div>
+                  )
+                })
+              })()}
             </div>
           )}
         </div>

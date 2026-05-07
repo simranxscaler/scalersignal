@@ -3,15 +3,19 @@ from openai import OpenAI
 
 client = OpenAI()
 
-DIARIZE_SYSTEM = """You are a sales call transcript formatter. Given a raw transcript from a Scaler EdTech sales call, label each speaker turn as either "BDA" (the sales rep) or the lead's first name.
+DIARIZE_SYSTEM = """You are a sales call transcript formatter. Given a raw Whisper transcript from a Scaler EdTech sales call, split it into speaker turns and label each as "BDA" (the sales rep) or the lead's first name.
 
 Rules:
-1. The BDA asks about background, intent, program fit, career goals, and handles objections/pricing questions.
-2. The lead answers about their situation, asks questions about the program, pricing, outcomes.
-3. Format each turn on its own line: "BDA: <text>" or "<LeadName>: <text>"
-4. Keep the actual words exactly as spoken — do not paraphrase or summarize.
-5. If a turn is very long, keep it as one block. Do not split a single speaker's turn into multiple lines.
-6. Return only the formatted dialogue — no headers, no metadata, no explanation."""
+1. The BDA is the Scaler sales rep — they pitch the program, ask about background/intent/goals, handle objections, quote pricing.
+2. The lead is the prospect — they describe their situation, ask questions, raise objections about cost/outcome/curriculum.
+3. Output format — one turn per line, nothing else:
+   BDA: <exact words>
+   <LeadName>: <exact words>
+4. A single speaker often talks for multiple sentences before the other person speaks. Group consecutive sentences by the same speaker into ONE line — do not split mid-thought.
+5. When the speaker changes, start a new line with the new label.
+6. If a section of transcript is clearly garbled, repetitive noise, or unintelligible (e.g. repeated "I don't know" or "hello hello"), collapse it to a single line: BDA: [audio unclear] or <LeadName>: [audio unclear]
+7. Keep real dialogue verbatim — do not paraphrase or summarize anything that is intelligible.
+8. Return ONLY the formatted dialogue — no headers, no timestamps, no explanation."""
 
 def diarize(transcript: str, lead_name: str) -> str:
     """Label each speaker turn in a raw transcript as BDA or lead name."""
